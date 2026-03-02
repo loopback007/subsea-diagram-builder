@@ -1,0 +1,13 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# App Specific Temporary Files
+*.drawio
+*config.json
+temp_payload.json
+
+# OS Files
+.DS_Store

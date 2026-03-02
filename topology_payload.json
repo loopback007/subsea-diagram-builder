@@ -1,0 +1,35 @@
+{
+  "system_name": "Project_Alpha_Subsea",
+  "trunk": {
+    "total_fps": 24,
+    "west_node": "CLS 1\n(West Trunk)",
+    "east_node": "CLS 3\n(East Trunk)"
+  },
+  "branches": [
+    {
+      "id": "BU1",
+      "label": "BU 1",
+      "drops": [
+        {
+          "target_id": "CLS2",
+          "label": "CLS 2\n(24 FP Branch)",
+          "fp_range": [13, 18],
+          "sub_branches": []
+        },
+        {
+          "target_id": "BU1B",
+          "label": "BU 1B\n(Sub-Branch)",
+          "fp_range": [19, 24],
+          "sub_branches": [
+            {
+              "target_id": "CLS4",
+              "label": "CLS 4\n(24 FP Branch)",
+              "fp_range": [19, 24],
+              "direction": "east" 
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

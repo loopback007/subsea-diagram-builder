@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Subsea Topology Generator</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background-color: #f0f2f5; }
+        .card { border: 1px solid #ccc; padding: 15px; margin-top: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .drop-card { border-left: 4px solid #0050ef; margin-left: 20px; background: #fafafa; }
+        .sub-branch-card { border-left: 4px solid #107c10; margin-left: 20px; background: #fff; margin-top: 10px; }
+        input, select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 12px; margin-top: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        .btn-add { background-color: #e1dfdd; color: #333; border: 1px solid #ccc; }
+        .btn-add:hover { background-color: #d2d0ce; }
+        .btn-primary { background-color: #0050ef; color: white; border: none; font-size: 16px; padding: 10px 20px; }
+        .btn-primary:hover { background-color: #0043c7; }
+        .btn-action { background-color: #107c10; color: white; border: none; }
+        .btn-action:hover { background-color: #0b5a0b; }
+        h3, h4, h5 { margin-top: 0; color: #323130; }
+        .action-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+        .file-controls { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>Subsea Topology Generator</h2>
+    
+    <div class="card">
+        <h3>System & Trunk Configuration</h3>
+        <input type="text" id="sysName" placeholder="System Name" value="Project_Alpha">
+        <input type="number" id="totalFPs" placeholder="Total Trunk FPs" value="24" style="width: 120px;">
+        <input type="text" id="westNode" placeholder="West Node Label" value="CLS 1\n(West Trunk)">
+        <input type="text" id="eastNode" placeholder="East Node Label" value="CLS 3\n(East Trunk)">
+    </div>
+
+    <div id="branchesContainer"></div>
+    
+    <button class="btn-add" onclick="addBranchingUnit()">+ Add Branching Unit</button>
+    
+    <div class="action-bar">
+        <div class="file-controls">
+            <button class="btn-action" onclick="exportConfig()">Save Config</button>
+            <button class="btn-action" onclick="document.getElementById('fileInput').click()">Load Config</button>
+            <input type="file" id="fileInput" style="display: none;" accept=".json" onchange="importConfig(event)">
+        </div>
+        <button class="btn-primary" onclick="generateDiagram()">Generate Draw.io Diagram</button>
+    </div>
+
+    <script>
+        let buCount = 0;
+        let globalDropCount = 0; 
+
+        function addBranchingUnit() {
+            buCount++;
+            const buId = `BU${buCount}`;
+            const html = `
+                <div class="card" id="card_${buId}">
+                    <h4>Branching Unit: ${buId}</h4>
+                    <input type="text" id="label_${buId}" placeholder="BU Label" value="BU ${buCount}">
+                    <div id="drops_${buId}"></div>
+                    <button class="btn-add" onclick="addDrop('${buId}')">+ Add Branch Drop</button>
+                </div>
+            `;
+            document.getElementById('branchesContainer').insertAdjacentHTML('beforeend', html);
+        }
+
+        function addDrop(buId) {
+            globalDropCount++;
+            const dropId = `drop_${globalDropCount}`;
+            const dropHtml = `
+                <div class="card drop-card drop-entry-${buId}" id="${dropId}">
+                    <h5>Primary Drop</h5>
+                    <input type="text" class="targetId" placeholder="Target ID (e.g. CLS2)" value="CLS_X">
+                    <input type="text" class="targetLabel" placeholder="Drop Label" value="Branch Drop">
+                    <input type="number" class="fpStart" placeholder="FP Start" style="width: 80px;">
+                    <input type="number" class="fpEnd" placeholder="FP End" style="width: 80px;">
+                    
+                    <div id="sub_branches_${dropId}"></div>
+                    <button class="btn-add" style="font-size: 0.9em;" onclick="addSubBranch('${dropId}')">+ Add Sub-Branch</button>
+                </div>
+            `;
+            document.getElementById(`drops_${buId}`).insertAdjacentHTML('beforeend', dropHtml);
+        }
+
+        function addSubBranch(dropId) {
+            const subHtml = `
+                <div class="card sub-branch-card">
+                    <h5>Sub-Branch (Branch-on-Branch)</h5>
+                    <input type="text" class="subTargetId" placeholder="Target ID" value="CLS_Y">
+                    <input type="text" class="subLabel" placeholder="Sub-Branch Label" value="Sub-Branch Drop">
+                    <input type="number" class="subFpStart" placeholder="FP Start" style="width: 80px;">
+                    <input type="number" class="subFpEnd" placeholder="FP End" style="width: 80px;">
+                    <select class="subDirection">
+                        <option value="down">Route Down (Vertical)</option>
+                        <option value="east">Route East (Horizontal)</option>
+                    </select>
+                </div>
+            `;
+            document.getElementById(`sub_branches_${dropId}`).insertAdjacentHTML('beforeend', subHtml);
+        }
+
+        function buildPayloadObject() {
+            const payload = {
+                system_name: document.getElementById('sysName').value,
+                trunk: {
+                    total_fps: parseInt(document.getElementById('totalFPs').value),
+                    west_node: document.getElementById('westNode').value,
+                    east_node: document.getElementById('eastNode').value
+                },
+                branches: []
+            };
+
+            for (let i = 1; i <= buCount; i++) {
+                const buId = `BU${i}`;
+                if (!document.getElementById(`card_${buId}`)) continue;
+
+                let branchObj = {
+                    id: buId,
+                    label: document.getElementById(`label_${buId}`).value,
+                    drops: []
+                };
+
+                const dropNodes = document.querySelectorAll(`.drop-entry-${buId}`);
+                dropNodes.forEach(node => {
+                    let dropData = {
+                        target_id: node.querySelector('.targetId').value,
+                        label: node.querySelector('.targetLabel').value,
+                        fp_range: [
+                            parseInt(node.querySelector('.fpStart').value) || 0,
+                            parseInt(node.querySelector('.fpEnd').value) || 0
+                        ],
+                        sub_branches: []
+                    };
+
+                    const subNodes = node.querySelectorAll('.sub-branch-card');
+                    subNodes.forEach(subNode => {
+                        dropData.sub_branches.push({
+                            target_id: subNode.querySelector('.subTargetId').value,
+                            label: subNode.querySelector('.subLabel').value,
+                            fp_range: [
+                                parseInt(subNode.querySelector('.subFpStart').value) || 0,
+                                parseInt(subNode.querySelector('.subFpEnd').value) || 0
+                            ],
+                            direction: subNode.querySelector('.subDirection').value
+                        });
+                    });
+                    branchObj.drops.push(dropData);
+                });
+                payload.branches.push(branchObj);
+            }
+            return payload;
+        }
+
+        // --- NEW DATA PERSISTENCE FUNCTIONS ---
+        
+        function exportConfig() {
+            const payload = buildPayloadObject();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+            const a = document.createElement('a');
+            a.href = dataStr;
+            a.download = `${payload.system_name || 'topology'}_config.json`;
+            a.click();
+        }
+
+        function importConfig(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const config = JSON.parse(e.target.result);
+                    rebuildUI(config);
+                } catch (err) {
+                    alert("Invalid JSON file.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset file input so same file can be loaded again if needed
+        }
+
+        function rebuildUI(config) {
+            // 1. Wipe current state
+            document.getElementById('branchesContainer').innerHTML = '';
+            buCount = 0;
+            globalDropCount = 0;
+
+            // 2. Rebuild Trunk
+            document.getElementById('sysName').value = config.system_name || '';
+            document.getElementById('totalFPs').value = config.trunk?.total_fps || 24;
+            document.getElementById('westNode').value = config.trunk?.west_node || '';
+            document.getElementById('eastNode').value = config.trunk?.east_node || '';
+
+            // 3. Rebuild Branches & Sub-Branches
+            (config.branches || []).forEach(bu => {
+                addBranchingUnit();
+                const currentBuId = `BU${buCount}`;
+                document.getElementById(`label_${currentBuId}`).value = bu.label || '';
+
+                (bu.drops || []).forEach(drop => {
+                    addDrop(currentBuId);
+                    const currentDropId = `drop_${globalDropCount}`;
+                    const dropEl = document.getElementById(currentDropId);
+                    
+                    dropEl.querySelector('.targetId').value = drop.target_id || '';
+                    dropEl.querySelector('.targetLabel').value = drop.label || '';
+                    dropEl.querySelector('.fpStart').value = drop.fp_range[0];
+                    dropEl.querySelector('.fpEnd').value = drop.fp_range[1];
+
+                    (drop.sub_branches || []).forEach(sub => {
+                        addSubBranch(currentDropId);
+                        const subNodes = dropEl.querySelectorAll('.sub-branch-card');
+                        const currentSubEl = subNodes[subNodes.length - 1]; // Get the one we just added
+
+                        currentSubEl.querySelector('.subTargetId').value = sub.target_id || '';
+                        currentSubEl.querySelector('.subLabel').value = sub.label || '';
+                        currentSubEl.querySelector('.subFpStart').value = sub.fp_range[0];
+                        currentSubEl.querySelector('.subFpEnd').value = sub.fp_range[1];
+                        currentSubEl.querySelector('.subDirection').value = sub.direction || 'down';
+                    });
+                });
+            });
+        }
+
+        // --- END PERSISTENCE ---
+
+        async function generateDiagram() {
+            const payload = buildPayloadObject();
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${payload.system_name}.drawio`;
+                    a.click();
+                } else {
+                    const errorText = await response.text();
+                    alert(`Generation Error: ${errorText}`);
+                }
+            } catch (err) {
+                alert(`Network Error: Ensure the Flask backend is running. Details: ${err}`);
+            }
+        }
+    </script>
+</body>
+</html>

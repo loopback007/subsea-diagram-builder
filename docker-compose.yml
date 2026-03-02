@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  subsea-generator:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: subsea-topology-api
+    restart: unless-stopped
+    ports:
+      # Exposing on 8080 to avoid clashing with other web services on your host
+      # Format is HostPort:ContainerPort
+      - "8080:80"
+    volumes:
+      # Bind mounts for live editing. 
+      # If you update the UI or Python math, it updates inside the container.
+      - ./static:/app/static
+      - ./app.py:/app/app.py
+      - ./subsea_engine.py:/app/subsea_engine.py
+    environment:
+      - FLASK_ENV=production
+    networks:
+      - subsea_net
+
+networks:
+  subsea_net:
+    driver: bridge
