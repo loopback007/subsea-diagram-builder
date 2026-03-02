@@ -1,0 +1,17 @@
+services:
+  subsea-generator:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: subsea-topology-api
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      - FLASK_ENV=production
+    networks:
+      - subsea_net
+
+networks:
+  subsea_net:
+    driver: bridge
