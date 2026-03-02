@@ -10,7 +10,7 @@ services:
     ports:
       # Exposing on 8080 to avoid clashing with other web services on your host
       # Format is HostPort:ContainerPort
-      - "8080:80"
+      - "8081:80"
     volumes:
       # Bind mounts for live editing. 
       # If you update the UI or Python math, it updates inside the container.
