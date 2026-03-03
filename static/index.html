@@ -108,7 +108,54 @@
         .instructions h3 { margin-top: 0; color: #0078d4; }
         .instructions ol { padding-left: 20px; margin: 0; }
         .instructions li { margin-bottom: 8px; line-height: 1.5; }
+
+        /* Diagram preview panel */
+        #diagramPreviewPanel {
+            margin-top: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        #diagramPreviewHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ccc;
+        }
+        #diagramPreviewTitle {
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #323130;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #previewStaleTag {
+            display: none;
+            font-size: 0.75em;
+            font-weight: normal;
+            background: #fff4ce;
+            border: 1px solid #f0c000;
+            color: #7d5c00;
+            padding: 2px 7px;
+            border-radius: 10px;
+        }
+        #diagramPreviewContent { display: none; min-height: 200px; }
+        #diagramPreviewContent.open { display: block; }
+        #diagramPreviewPlaceholder {
+            padding: 48px 20px;
+            text-align: center;
+            color: #a19f9d;
+            font-size: 0.9em;
+        }
+        #diagramRenderTarget { padding: 10px; overflow: auto; }
+        #diagramRenderTarget .mxgraph { max-width: 100% !important; }
     </style>
+    <script src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>
 </head>
 <body>
 
@@ -156,6 +203,26 @@
         </button>
         <div id="jsonPreviewContent">
             <pre id="jsonPreview"></pre>
+        </div>
+    </div>
+
+    <!-- Diagram Preview Panel -->
+    <div id="diagramPreviewPanel">
+        <div id="diagramPreviewHeader">
+            <div id="diagramPreviewTitle">
+                <span>Diagram Preview</span>
+                <span id="previewStaleTag">⚠ Stale — regenerate to update</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-primary" style="font-size:0.9em; padding:7px 16px; margin:0;"
+                        onclick="previewDiagram(this)">▶ Generate Preview</button>
+                <button class="btn-reorder" style="font-size:0.85em;"
+                        onclick="toggleDiagramPreview()" id="previewToggleBtn">Show ▼</button>
+            </div>
+        </div>
+        <div id="diagramPreviewContent">
+            <div id="diagramPreviewPlaceholder">Click "Generate Preview" to render the diagram here.</div>
+            <div id="diagramRenderTarget" style="display:none;"></div>
         </div>
     </div>
 
@@ -739,6 +806,77 @@
 
             updateColorSwatch();
             refreshJsonPreview();
+        }
+
+        // ─── DIAGRAM PREVIEW ─────────────────────────────────────────────────────────
+        let previewIsOpen   = false;
+        let previewHasContent = false;
+
+        function toggleDiagramPreview() {
+            const content = document.getElementById('diagramPreviewContent');
+            const btn     = document.getElementById('previewToggleBtn');
+            previewIsOpen = !previewIsOpen;
+            content.classList.toggle('open', previewIsOpen);
+            btn.textContent = previewIsOpen ? 'Hide ▲' : 'Show ▼';
+        }
+
+        // Mark the preview stale whenever the user changes anything after rendering
+        function markPreviewStale() {
+            if (previewHasContent) {
+                document.getElementById('previewStaleTag').style.display = 'inline-block';
+            }
+        }
+        document.addEventListener('input',  markPreviewStale);
+        document.addEventListener('change', markPreviewStale);
+
+        async function previewDiagram(btnElement) {
+            const orig = btnElement.textContent;
+            btnElement.textContent = '⏳ Generating...';
+            btnElement.disabled = true;
+
+            const result = await callGenerateAPI('text');
+
+            if (result.ok) {
+                // Open panel if not already open
+                if (!previewIsOpen) toggleDiagramPreview();
+
+                const placeholder = document.getElementById('diagramPreviewPlaceholder');
+                const target      = document.getElementById('diagramRenderTarget');
+
+                // Clear previous render completely so the viewer starts fresh
+                target.innerHTML = '';
+
+                // Build the mxgraph div the viewer expects
+                const graphDiv = document.createElement('div');
+                graphDiv.className = 'mxgraph';
+                graphDiv.setAttribute('data-mxgraph', JSON.stringify({
+                    highlight: '#0050ef',
+                    nav:       true,
+                    resize:    true,
+                    fit:       true,
+                    toolbar:   'zoom layers lightbox',
+                    xml:       result.data
+                }));
+                target.appendChild(graphDiv);
+
+                placeholder.style.display = 'none';
+                target.style.display      = 'block';
+
+                // Trigger the Draw.io viewer to process the new element
+                if (window.GraphViewer) {
+                    GraphViewer.processElements();
+                }
+
+                // Clear stale tag — this is now the current render
+                document.getElementById('previewStaleTag').style.display = 'none';
+                previewHasContent = true;
+
+            } else {
+                if (result.error) showError(result.error);
+            }
+
+            btnElement.textContent = orig;
+            btnElement.disabled = false;
         }
 
         // ─── INIT ─────────────────────────────────────────────────────────────────────

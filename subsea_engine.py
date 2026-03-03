@@ -274,6 +274,121 @@ def generate_from_config(config):
         for line_args in fp_sub_lines:
             add_line(*line_args)
 
+    # --- LEGEND ---
+    def add_legend():
+        """
+        Renders a color legend in the bottom-left corner of the diagram,
+        anchored below the WEST node. Only drawn when custom color rules exist.
+        Each distinct color gets one row: a short line swatch + FP range label.
+        Default-color FPs are included if any remain uncovered by the rules.
+        """
+        colors_config = config["trunk"].get("colors", [])
+        if not colors_config:
+            return  # Nothing to explain — skip entirely
+
+        DEFAULT_COLOR = "#0050ef"
+        LEGEND_WIDTH  = 230
+        ROW_HEIGHT    = 28
+        H_PAD         = 12
+        SWATCH_W      = 30
+        TITLE_H       = 30
+
+        # Build color → sorted list of (start, end) pairs from the rules
+        color_to_ranges = {}
+        covered_fps = set()
+        for rule in colors_config:
+            s = max(1, rule["fp_range"][0])
+            e = min(trunk_fps, rule["fp_range"][1])
+            c = rule["color"]
+            color_to_ranges.setdefault(c, []).append((s, e))
+            covered_fps.update(range(s, e + 1))
+
+        # Collect any FPs still on the default color
+        default_fps = sorted(i for i in range(1, trunk_fps + 1) if i not in covered_fps)
+
+        # Helper: compress a sorted list of ints into [(start,end), ...] range pairs
+        def to_ranges(fps):
+            if not fps:
+                return []
+            ranges, start, prev = [], fps[0], fps[0]
+            for fp in fps[1:]:
+                if fp == prev + 1:
+                    prev = fp
+                else:
+                    ranges.append((start, prev))
+                    start = prev = fp
+            ranges.append((start, prev))
+            return ranges
+
+        def ranges_label(pairs):
+            return "FPs: " + ", ".join(
+                f"{s}–{e}" if s != e else str(s) for s, e in sorted(pairs)
+            )
+
+        # Build ordered entry list: default first (if present), then each rule color
+        entries = []
+        if default_fps:
+            entries.append((ranges_label(to_ranges(default_fps)), DEFAULT_COLOR))
+        for color, pairs in color_to_ranges.items():
+            entries.append((ranges_label(pairs), color))
+
+        legend_height = TITLE_H + (len(entries) * ROW_HEIGHT) + H_PAD
+
+        # Position: directly below the WEST node with a comfortable gap
+        lx = int(nodes["WEST"]["x"])
+        ly = int(nodes["WEST"]["y"] + TRUNK_NODE_HEIGHT + 60)
+
+        # Outer box with "Legend" title
+        box_style = (
+            "rounded=1;whiteSpace=wrap;html=1;"
+            "fillColor=#ffffff;strokeColor=#666666;"
+            "verticalAlign=top;align=left;"
+            "spacingTop=6;spacingLeft=10;"
+            "fontSize=11;fontStyle=1;"
+        )
+        box = ET.SubElement(root, 'mxCell',
+                            id="legend_box", value="Legend",
+                            style=box_style, vertex="1", parent="1")
+        ET.SubElement(box, 'mxGeometry',
+                      x=str(lx), y=str(ly),
+                      width=str(LEGEND_WIDTH), height=str(legend_height),
+                      **{'as': 'geometry'})
+
+        # One row per entry
+        for idx, (label, color) in enumerate(entries):
+            row_y    = ly + TITLE_H + (idx * ROW_HEIGHT)
+            swatch_y = row_y + ROW_HEIGHT // 2
+
+            # Colored line swatch
+            swatch_style = f"endArrow=none;html=1;rounded=0;strokeColor={color};strokeWidth=3;"
+            swatch_cell  = ET.SubElement(root, 'mxCell',
+                                         id=f"legend_swatch_{idx}",
+                                         style=swatch_style, edge="1", parent="1")
+            swatch_geom  = ET.SubElement(swatch_cell, 'mxGeometry',
+                                         relative="1", **{'as': 'geometry'})
+            ET.SubElement(swatch_geom, 'mxPoint',
+                          x=str(lx + H_PAD), y=str(swatch_y), **{'as': 'sourcePoint'})
+            ET.SubElement(swatch_geom, 'mxPoint',
+                          x=str(lx + H_PAD + SWATCH_W), y=str(swatch_y), **{'as': 'targetPoint'})
+
+            # Label text
+            text_style = (
+                "text;html=1;strokeColor=none;fillColor=none;"
+                "align=left;verticalAlign=middle;"
+                "whiteSpace=wrap;rounded=0;fontSize=10;"
+            )
+            text_x = lx + H_PAD + SWATCH_W + 8
+            text_w = LEGEND_WIDTH - H_PAD - SWATCH_W - 20
+            text_cell = ET.SubElement(root, 'mxCell',
+                                      id=f"legend_label_{idx}", value=label,
+                                      style=text_style, vertex="1", parent="1")
+            ET.SubElement(text_cell, 'mxGeometry',
+                          x=str(text_x), y=str(row_y),
+                          width=str(text_w), height=str(ROW_HEIGHT),
+                          **{'as': 'geometry'})
+
+    add_legend()
+
     # --- SERIALIZE ---
     ET.indent(tree := ET.ElementTree(mxfile), space="\t", level=0)
     buffer = io.BytesIO()
