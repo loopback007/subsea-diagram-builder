@@ -1,37 +1,39 @@
 from flask import Flask, request, send_file, jsonify
-import os
-import json
-# Assuming your generation script is saved as 'subsea_engine.py'
-from subsea_engine import generate_from_json 
+import io
+from subsea_engine import generate_from_config
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
 @app.route('/')
 def index():
-    # Serve the frontend HTML form
     return app.send_static_file('index.html')
 
 @app.route('/api/generate', methods=['POST'])
 def generate_topology():
     try:
         payload = request.get_json()
-        
-        # Temporary file handling (in production, use tempfile or memory buffers)
-        input_filepath = 'temp_payload.json'
-        output_filepath = f"{payload.get('system_name', 'topology_output')}.drawio"
-        
-        with open(input_filepath, 'w') as f:
-            json.dump(payload, f)
-            
-        # Trigger the math engine
-        generate_from_json(input_filepath, output_filepath)
-        
-        # Send the file back to the browser
-        return send_file(output_filepath, as_attachment=True)
-        
+        if not payload:
+            return jsonify({"error": "Missing or invalid JSON body."}), 400
+
+        # FIX: Generate entirely in-memory — no temp files, no concurrent-request collisions.
+        xml_bytes = generate_from_config(payload)
+
+        system_name = payload.get('system_name', 'topology_output')
+        filename = f"{system_name}.drawio"
+
+        return send_file(
+            io.BytesIO(xml_bytes),
+            mimetype='application/xml',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except ValueError as e:
+        # Structured validation errors from the engine come back as 422 with detail
+        return jsonify({"error": str(e)}), 422
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Unexpected server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    # Binds to 0.0.0.0 making it ready for a Docker container
     app.run(host='0.0.0.0', port=5000, debug=True)

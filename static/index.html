@@ -4,49 +4,138 @@
     <meta charset="UTF-8">
     <title>Subsea Topology Generator</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background-color: #f0f2f5; }
+        body { font-family: sans-serif; padding: 20px; max-width: 960px; margin: auto; background-color: #f0f2f5; }
+
         .card { border: 1px solid #ccc; padding: 15px; margin-top: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .drop-card { border-left: 4px solid #0050ef; margin-left: 20px; background: #fafafa; }
         .sub-branch-card { border-left: 4px solid #107c10; margin-left: 20px; background: #fff; margin-top: 10px; }
-        .fp-bundle { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
-        input, select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+        .fp-bundle { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+        input[type="text"], input[type="number"], select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        input.field-error { border-color: #d13438 !important; background-color: #fff4f4; }
+
         button { padding: 8px 12px; margin-top: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; }
-        .btn-add { background-color: #e1dfdd; color: #333; border: 1px solid #ccc; }
+        .btn-add  { background-color: #e1dfdd; color: #333; border: 1px solid #ccc; font-size: 0.85em; }
         .btn-add:hover { background-color: #d2d0ce; }
+        .btn-delete { background: none; border: none; color: #a4262c; font-size: 1.1em; padding: 2px 6px; margin: 0; cursor: pointer; line-height: 1; border-radius: 4px; font-weight: bold; }
+        .btn-delete:hover { background-color: #fde7e9; }
+        .btn-reorder { background: none; border: 1px solid #ccc; color: #555; font-size: 0.8em; padding: 3px 7px; margin: 0 1px; cursor: pointer; border-radius: 4px; }
+        .btn-reorder:hover { background-color: #e1dfdd; }
         .btn-primary { background-color: #0050ef; color: white; border: none; font-size: 16px; padding: 10px 20px; }
         .btn-primary:hover { background-color: #0043c7; }
         .btn-action { background-color: #107c10; color: white; border: none; }
         .btn-action:hover { background-color: #0b5a0b; }
-        h3, h4, h5 { margin-top: 0; color: #323130; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-header h4, .card-header h5 { margin: 0; color: #323130; }
+        .card-controls { display: flex; align-items: center; gap: 4px; }
+
+        h3 { margin-top: 0; color: #323130; }
         .action-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
         .file-controls { display: flex; gap: 10px; }
-        .instructions { background-color: #e8f4f8; border-left: 4px solid #0078d4; padding: 15px; margin-top: 30px; border-radius: 4px; }
+
+        /* Error banner */
+        #errorBanner {
+            display: none;
+            background-color: #fde7e9;
+            border-left: 4px solid #d13438;
+            color: #a4262c;
+            padding: 12px 16px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        /* Color swatch */
+        #colorSwatch {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1px;
+            margin-top: 10px;
+            padding: 6px;
+            background: #f0f2f5;
+            border-radius: 4px;
+            min-height: 28px;
+        }
+        .swatch-cell {
+            height: 20px;
+            border-radius: 2px;
+            cursor: default;
+        }
+        #colorSwatchLabel { font-size: 0.8em; color: #605e5c; margin-top: 4px; }
+
+        /* JSON preview */
+        #jsonPreviewPanel {
+            margin-top: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        #jsonPreviewToggle {
+            width: 100%;
+            background: #f5f5f5;
+            border: none;
+            border-bottom: 1px solid #ccc;
+            padding: 10px 15px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #323130;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #jsonPreviewToggle:hover { background: #e8e8e8; }
+        #jsonPreviewContent { display: none; padding: 0; }
+        #jsonPreviewContent.open { display: block; }
+        #jsonPreview {
+            margin: 0;
+            padding: 12px 15px;
+            font-size: 0.8em;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 0;
+            white-space: pre;
+        }
+
+        .instructions { background-color: #e8f4f8; border-left: 4px solid #0078d4; padding: 15px; margin-top: 20px; border-radius: 4px; }
         .instructions h3 { margin-top: 0; color: #0078d4; }
-        .instructions ol { padding-left: 20px; }
+        .instructions ol { padding-left: 20px; margin: 0; }
         .instructions li { margin-bottom: 8px; line-height: 1.5; }
     </style>
 </head>
 <body>
 
     <h2>Subsea Topology Generator</h2>
-    
+
+    <div id="errorBanner"></div>
+
     <div class="card">
         <h3>System & Trunk Configuration</h3>
         <input type="text" id="sysName" placeholder="System Name" value="Project_Alpha">
-        <input type="number" id="totalFPs" placeholder="Total Trunk FPs" value="24" style="width: 120px;">
+        <input type="number" id="totalFPs" placeholder="Total Trunk FPs" value="24" style="width: 120px;" oninput="updateColorSwatch()">
         <input type="text" id="westNode" placeholder="West Node Label" value="CLS 1\n(West Trunk)">
         <input type="text" id="eastNode" placeholder="East Node Label" value="CLS 3\n(East Trunk)">
+
         <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
-            <h4>Trunk Color Mapping</h4>
+            <h3 style="font-size:1em; margin-bottom: 6px;">Trunk Color Mapping</h3>
             <div id="colorRulesContainer"></div>
-            <button class="btn-add" style="font-size: 0.85em;" onclick="addColorRule()">+ Add Color Override</button>
+            <button class="btn-add" onclick="addColorRule()">+ Add Color Override</button>
+            <div id="colorSwatch"></div>
+            <div id="colorSwatchLabel"></div>
         </div>
     </div>
 
     <div id="branchesContainer"></div>
-    
-    <button class="btn-add" onclick="addBranchingUnit()">+ Add Branching Unit</button>
-    
+
+    <button class="btn-add" style="font-size: 1em; padding: 10px 14px; margin-top: 12px;" onclick="addBranchingUnit()">+ Add Branching Unit</button>
+
     <div class="action-bar">
         <div class="file-controls">
             <button class="btn-action" onclick="exportConfig()">Export JSON</button>
@@ -55,7 +144,18 @@
         </div>
         <div>
             <button class="btn-primary" style="background-color: #d24726; margin-right: 10px;" onclick="copyDiagramXML(this)">Copy XML</button>
-            <button class="btn-primary" onclick="generateDiagram()">Download .drawio</button>
+            <button class="btn-primary" onclick="generateDiagram(this)">Download .drawio</button>
+        </div>
+    </div>
+
+    <!-- Live JSON Preview Panel -->
+    <div id="jsonPreviewPanel">
+        <button id="jsonPreviewToggle" onclick="toggleJsonPreview(this)">
+            <span>Live JSON Preview</span>
+            <span id="jsonPreviewArrow">▶</span>
+        </button>
+        <div id="jsonPreviewContent">
+            <pre id="jsonPreview"></pre>
         </div>
     </div>
 
@@ -63,185 +163,498 @@
         <h3>How to Generate a Topology</h3>
         <ol>
             <li><strong>Define the Trunk:</strong> Set the total fiber pairs (FPs) for the main continuous cable.</li>
-            <li><strong>Add Branching Units (BUs):</strong> Click "+ Add Branching Unit" for every physical BU sitting on the main trunk.</li>
+            <li><strong>Add Branching Units (BUs):</strong> Click "+ Add Branching Unit" for every physical BU. Use ▲▼ to reorder and × to delete.</li>
             <li><strong>Assign Destinations (Drops):</strong> Inside each BU, add a "Branch Drop" to represent the target station (e.g., CLS 5).</li>
-            <li><strong>Map the Fibers:</strong> For each drop, specify which FPs route there. If non-contiguous pairs drop to the same location (e.g., 7-12 AND 19-24), click "+ Add FP Bundle" inside that drop.</li>
-            <li><strong>Sub-Branching (Optional):</strong> If a drop hits a secondary BU before reaching a terminal station, use the "+ Add Sub-Branch" feature to tier the diagram.</li>
-            <li><strong>Generate:</strong> Click "Generate Draw.io Diagram" to download the XML schema, then open it in <a href="https://app.diagrams.net/" target="_blank">Draw.io</a>.</li>
+            <li><strong>Map the Fibers:</strong> For each drop, specify which FPs route there. Use "+ Add FP Bundle" for non-contiguous pairs.</li>
+            <li><strong>Sub-Branching (Optional):</strong> Use "+ Add Sub-Branch" to tier the diagram. Sub-branches also support multiple FP bundles.</li>
+            <li><strong>Generate:</strong> Click "Download .drawio" then open in <a href="https://app.diagrams.net/" target="_blank">Draw.io</a>.</li>
         </ol>
     </div>
 
     <script>
         let buCount = 0;
-        let globalDropCount = 0; 
+        let globalDropCount = 0;
         let globalBundleCount = 0;
+        let globalSubCount = 0;
 
+        // ─── ERROR BANNER ────────────────────────────────────────────────────────────
+        function showError(message) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = message;
+            banner.style.display = 'block';
+            banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        function clearError() {
+            document.getElementById('errorBanner').style.display = 'none';
+            document.getElementById('errorBanner').textContent = '';
+        }
+
+        // ─── COLOR SWATCH ─────────────────────────────────────────────────────────────
+        function updateColorSwatch() {
+            const totalFPs = parseInt(document.getElementById('totalFPs').value) || 0;
+            const colors = {};
+            for (let i = 1; i <= totalFPs; i++) colors[i] = '#0050ef';
+
+            document.querySelectorAll('.color-rule').forEach(rule => {
+                const start = parseInt(rule.querySelector('.colorStart').value);
+                const end   = parseInt(rule.querySelector('.colorEnd').value);
+                const hex   = rule.querySelector('.colorHex').value;
+                if (!isNaN(start) && !isNaN(end)) {
+                    for (let i = Math.max(1, start); i <= Math.min(totalFPs, end); i++) {
+                        colors[i] = hex;
+                    }
+                }
+            });
+
+            const container = document.getElementById('colorSwatch');
+            const label     = document.getElementById('colorSwatchLabel');
+            container.innerHTML = '';
+
+            if (totalFPs < 1) { label.textContent = ''; return; }
+
+            const cellW = Math.max(4, Math.min(18, Math.floor(860 / totalFPs)));
+            for (let i = 1; i <= totalFPs; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'swatch-cell';
+                cell.style.width = cellW + 'px';
+                cell.style.background = colors[i];
+                cell.title = `FP ${i} — ${colors[i]}`;
+                container.appendChild(cell);
+            }
+            label.textContent = `${totalFPs} FP${totalFPs !== 1 ? 's' : ''} shown`;
+        }
+
+        // ─── LIVE JSON PREVIEW ────────────────────────────────────────────────────────
+        function toggleJsonPreview(btn) {
+            const content = document.getElementById('jsonPreviewContent');
+            const arrow   = document.getElementById('jsonPreviewArrow');
+            const isOpen  = content.classList.toggle('open');
+            arrow.textContent = isOpen ? '▼' : '▶';
+            if (isOpen) refreshJsonPreview();
+        }
+
+        function refreshJsonPreview() {
+            const content = document.getElementById('jsonPreviewContent');
+            if (!content.classList.contains('open')) return;
+            try {
+                document.getElementById('jsonPreview').textContent =
+                    JSON.stringify(buildPayloadObject(), null, 2);
+            } catch(e) {}
+        }
+
+        // Refresh preview on any form interaction
+        document.addEventListener('input',  refreshJsonPreview);
+        document.addEventListener('change', refreshJsonPreview);
+
+        // ─── CLIENT-SIDE VALIDATION ───────────────────────────────────────────────────
+        function clearFieldErrors() {
+            document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+        }
+
+        function validateForm() {
+            clearFieldErrors();
+            const errors = [];
+
+            const sysName  = document.getElementById('sysName');
+            const totalFPs = document.getElementById('totalFPs');
+            const westNode = document.getElementById('westNode');
+            const eastNode = document.getElementById('eastNode');
+
+            if (!sysName.value.trim()) {
+                sysName.classList.add('field-error');
+                errors.push('System name is required.');
+            }
+            const fpCount = parseInt(totalFPs.value);
+            if (isNaN(fpCount) || fpCount < 1) {
+                totalFPs.classList.add('field-error');
+                errors.push('Total trunk FPs must be a positive integer.');
+            }
+            if (!westNode.value.trim()) {
+                westNode.classList.add('field-error');
+                errors.push('West node label is required.');
+            }
+            if (!eastNode.value.trim()) {
+                eastNode.classList.add('field-error');
+                errors.push('East node label is required.');
+            }
+
+            const seenIds = new Set();
+
+            document.querySelectorAll('.bu-card').forEach((cardEl, buIdx) => {
+                const buLabel = `BU ${buIdx + 1}`;
+                const drops   = cardEl.querySelectorAll('.drop-card');
+
+                if (drops.length === 0) {
+                    errors.push(`${buLabel} has no drops.`);
+                }
+
+                drops.forEach(dropEl => {
+                    const tidEl = dropEl.querySelector('.targetId');
+                    const tid   = tidEl ? tidEl.value.trim() : '';
+
+                    if (!tid) {
+                        if (tidEl) tidEl.classList.add('field-error');
+                        errors.push(`${buLabel}: a drop is missing a Target ID.`);
+                    } else if (seenIds.has(tid)) {
+                        if (tidEl) tidEl.classList.add('field-error');
+                        errors.push(`Duplicate Target ID "${tid}" — every node must be unique.`);
+                    } else {
+                        seenIds.add(tid);
+                    }
+
+                    // Validate primary FP bundles
+                    const bundleClass = `bundle-entry-${dropEl.id}`;
+                    const bundles = dropEl.querySelectorAll(`.${bundleClass}`);
+                    if (bundles.length === 0) {
+                        errors.push(`Drop "${tid || '?'}" has no FP bundles.`);
+                    }
+                    bundles.forEach(bEl => {
+                        const startEl = bEl.querySelector('.fpStart');
+                        const endEl   = bEl.querySelector('.fpEnd');
+                        const s = parseInt(startEl?.value), e = parseInt(endEl?.value);
+                        if (isNaN(s) || isNaN(e)) {
+                            if (startEl) startEl.classList.add('field-error');
+                            if (endEl)   endEl.classList.add('field-error');
+                            errors.push(`Drop "${tid || '?'}": FP bundle has missing values.`);
+                        } else {
+                            if (s < 1) { startEl.classList.add('field-error'); errors.push(`Drop "${tid}": FP start must be ≥ 1.`); }
+                            if (s > e) { startEl.classList.add('field-error'); endEl.classList.add('field-error'); errors.push(`Drop "${tid}": FP range [${s}–${e}] is inverted.`); }
+                            if (!isNaN(fpCount) && e > fpCount) { endEl.classList.add('field-error'); errors.push(`Drop "${tid}": FP ${e} exceeds trunk size of ${fpCount}.`); }
+                        }
+                    });
+
+                    // Validate sub-branches
+                    dropEl.querySelectorAll('.sub-branch-card').forEach(subEl => {
+                        const subTidEl = subEl.querySelector('.subTargetId');
+                        const subTid   = subTidEl ? subTidEl.value.trim() : '';
+
+                        if (!subTid) {
+                            if (subTidEl) subTidEl.classList.add('field-error');
+                            errors.push(`Sub-branch under "${tid || '?'}": missing Target ID.`);
+                        } else if (seenIds.has(subTid)) {
+                            if (subTidEl) subTidEl.classList.add('field-error');
+                            errors.push(`Duplicate Target ID "${subTid}" — every node must be unique.`);
+                        } else {
+                            seenIds.add(subTid);
+                        }
+
+                        const subBundleClass = `sub-bundle-entry-${subEl.id}`;
+                        subEl.querySelectorAll(`.${subBundleClass}`).forEach(bEl => {
+                            const startEl = bEl.querySelector('.subFpStart');
+                            const endEl   = bEl.querySelector('.subFpEnd');
+                            const s = parseInt(startEl?.value), e = parseInt(endEl?.value);
+                            if (isNaN(s) || isNaN(e)) {
+                                if (startEl) startEl.classList.add('field-error');
+                                if (endEl)   endEl.classList.add('field-error');
+                                errors.push(`Sub-branch "${subTid || '?'}": FP bundle has missing values.`);
+                            } else {
+                                if (s < 1) { startEl.classList.add('field-error'); errors.push(`Sub-branch "${subTid}": FP start must be ≥ 1.`); }
+                                if (s > e) { startEl.classList.add('field-error'); endEl.classList.add('field-error'); errors.push(`Sub-branch "${subTid}": FP range [${s}–${e}] is inverted.`); }
+                                if (!isNaN(fpCount) && e > fpCount) { endEl.classList.add('field-error'); errors.push(`Sub-branch "${subTid}": FP ${e} exceeds trunk size of ${fpCount}.`); }
+                            }
+                        });
+                    });
+                });
+            });
+
+            return errors;
+        }
+
+        // ─── API HELPER ───────────────────────────────────────────────────────────────
+        async function callGenerateAPI(returnAs) {
+            clearError();
+            clearFieldErrors();
+
+            // Client-side validation first — no round-trip if it fails
+            const errors = validateForm();
+            if (errors.length > 0) {
+                showError(errors[0] + (errors.length > 1 ? ` (${errors.length - 1} more issue${errors.length > 2 ? 's' : ''} highlighted above)` : ''));
+                return { ok: false, error: null };
+            }
+
+            const payload = buildPayloadObject();
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMsg = `Server error (${response.status})`;
+                    try {
+                        const errBody = await response.json();
+                        if (errBody.error) errorMsg = errBody.error;
+                    } catch (_) {
+                        errorMsg = await response.text() || errorMsg;
+                    }
+                    return { ok: false, error: errorMsg };
+                }
+
+                const contentType = response.headers.get('Content-Type') || '';
+                if (!contentType.includes('xml') && !contentType.includes('octet-stream')) {
+                    const body = await response.text();
+                    return { ok: false, error: `Unexpected response type (${contentType}): ${body}` };
+                }
+
+                return { ok: true, data: returnAs === 'text' ? await response.text() : await response.blob() };
+
+            } catch (err) {
+                return { ok: false, error: `Network error — is the backend running? (${err.message})` };
+            }
+        }
+
+        // ─── COPY XML ────────────────────────────────────────────────────────────────
+        async function copyDiagramXML(btnElement) {
+            const orig = btnElement.innerText;
+            btnElement.innerText = 'Generating...';
+            btnElement.disabled = true;
+
+            const result = await callGenerateAPI('text');
+            if (result.ok) {
+                try {
+                    await navigator.clipboard.writeText(result.data);
+                    btnElement.innerText = '✅ Copied!';
+                    setTimeout(() => { btnElement.innerText = orig; }, 2500);
+                } catch (clipErr) {
+                    showError(`Generated OK but clipboard write failed: ${clipErr.message}`);
+                    btnElement.innerText = orig;
+                }
+            } else {
+                if (result.error) showError(result.error);
+                btnElement.innerText = orig;
+            }
+            btnElement.disabled = false;
+        }
+
+        // ─── DOWNLOAD .drawio ────────────────────────────────────────────────────────
+        async function generateDiagram(btnElement) {
+            const orig = btnElement.innerText;
+            btnElement.innerText = 'Generating...';
+            btnElement.disabled = true;
+
+            const result  = await callGenerateAPI('blob');
+            const payload = buildPayloadObject();
+
+            if (result.ok) {
+                const url = window.URL.createObjectURL(result.data);
+                const a = document.createElement('a');
+                a.href = url; a.download = `${payload.system_name}.drawio`; a.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                if (result.error) showError(result.error);
+            }
+            btnElement.innerText = orig;
+            btnElement.disabled = false;
+        }
+
+        // ─── BU BUILDERS ─────────────────────────────────────────────────────────────
         function addBranchingUnit() {
             buCount++;
             const buId = `BU${buCount}`;
             const html = `
-                <div class="card" id="card_${buId}">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h4>Branching Unit: ${buId}</h4>
-                        <select class="switchType" style="background-color: #f0f2f5; border: 1px solid #ccc; border-radius: 4px; padding: 4px;">
-                            <option value="1x1">1x1 Switch (Direct Drop)</option>
-                            <option value="1x2">1x2 Switch (Optical Split)</option>
-                        </select>
+                <div class="card bu-card" id="card_${buId}" data-bu-id="${buId}">
+                    <div class="card-header">
+                        <h4 style="margin:0; color:#323130;">Branching Unit: ${buId}</h4>
+                        <div class="card-controls">
+                            <select class="switchType" style="background-color:#f0f2f5; border:1px solid #ccc; border-radius:4px; padding:4px; margin:0;">
+                                <option value="1x1">1x1 Switch (Direct Drop)</option>
+                                <option value="1x2">1x2 Switch (Optical Split)</option>
+                            </select>
+                            <button class="btn-reorder" title="Move up"    onclick="moveBU('${buId}', 'up')">▲</button>
+                            <button class="btn-reorder" title="Move down"  onclick="moveBU('${buId}', 'down')">▼</button>
+                            <button class="btn-delete"  title="Delete BU"  onclick="deleteBU('${buId}')">×</button>
+                        </div>
                     </div>
-                    <input type="text" id="label_${buId}" placeholder="BU Label" value="BU ${buCount}">
+                    <input type="text" class="bu-label" placeholder="BU Label" value="BU ${buCount}">
                     <div id="drops_${buId}"></div>
                     <button class="btn-add" onclick="addDrop('${buId}')">+ Add Branch Drop</button>
                 </div>
             `;
             document.getElementById('branchesContainer').insertAdjacentHTML('beforeend', html);
         }
-        
+
+        function deleteBU(buId) {
+            document.getElementById(`card_${buId}`)?.remove();
+            refreshJsonPreview();
+        }
+
+        function moveBU(buId, direction) {
+            const card      = document.getElementById(`card_${buId}`);
+            const container = document.getElementById('branchesContainer');
+            if (direction === 'up' && card.previousElementSibling) {
+                container.insertBefore(card, card.previousElementSibling);
+            } else if (direction === 'down' && card.nextElementSibling) {
+                container.insertBefore(card.nextElementSibling, card);
+            }
+            refreshJsonPreview();
+        }
+
+        // ─── COLOR RULES ─────────────────────────────────────────────────────────────
         function addColorRule() {
             const html = `
-                <div class="fp-bundle color-rule">
+                <div class="fp-bundle color-rule" style="margin-top:6px;">
                     <span>FPs:</span>
-                    <input type="number" class="colorStart" placeholder="Start" style="width: 60px;">
+                    <input type="number" class="colorStart" placeholder="Start" style="width:60px;" oninput="updateColorSwatch()">
                     <span>to</span>
-                    <input type="number" class="colorEnd" placeholder="End" style="width: 60px;">
-                    <input type="color" class="colorHex" value="#ff0000" style="padding: 0; width: 40px; height: 30px; cursor: pointer;">
+                    <input type="number" class="colorEnd"   placeholder="End"   style="width:60px;" oninput="updateColorSwatch()">
+                    <input type="color"  class="colorHex"   value="#ff0000" style="padding:0;width:40px;height:30px;cursor:pointer;" oninput="updateColorSwatch()">
+                    <button class="btn-delete" title="Remove rule" onclick="this.parentElement.remove(); updateColorSwatch();">×</button>
                 </div>
             `;
             document.getElementById('colorRulesContainer').insertAdjacentHTML('beforeend', html);
         }
 
+        // ─── DROPS ───────────────────────────────────────────────────────────────────
         function addDrop(buId) {
             globalDropCount++;
             const dropId = `drop_${globalDropCount}`;
-            const dropHtml = `
+            const html = `
                 <div class="card drop-card drop-entry-${buId}" id="${dropId}">
-                    <h5>Destination (Primary Drop)</h5>
-                    <input type="text" class="targetId" placeholder="Target ID (e.g. CLS5)" value="CLS_X">
-                    <input type="text" class="targetLabel" placeholder="Drop Label" value="Branch Drop">
-                    
-                    <div id="bundles_${dropId}" style="margin: 10px 0;">
-                        </div>
-                    
-                    <button class="btn-add" style="font-size: 0.85em; margin-top: 0;" onclick="addFpBundle('${dropId}')">+ Add FP Bundle</button>
-                    
-                    <div id="sub_branches_${dropId}" style="margin-top: 15px;"></div>
-                    <button class="btn-add" style="font-size: 0.85em;" onclick="addSubBranch('${dropId}')">+ Add Sub-Branch</button>
+                    <div class="card-header">
+                        <h5>Destination (Primary Drop)</h5>
+                        <button class="btn-delete" title="Delete drop" onclick="document.getElementById('${dropId}').remove(); refreshJsonPreview();">×</button>
+                    </div>
+                    <input type="text" class="targetId"    placeholder="Target ID (e.g. CLS5)" value="CLS_X">
+                    <input type="text" class="targetLabel" placeholder="Drop Label"             value="Branch Drop">
+                    <div id="bundles_${dropId}" style="margin: 8px 0;"></div>
+                    <button class="btn-add" onclick="addFpBundle('${dropId}')">+ Add FP Bundle</button>
+                    <div id="sub_branches_${dropId}" style="margin-top:12px;"></div>
+                    <button class="btn-add" style="margin-top:8px;" onclick="addSubBranch('${dropId}')">+ Add Sub-Branch</button>
                 </div>
             `;
-            document.getElementById(`drops_${buId}`).insertAdjacentHTML('beforeend', dropHtml);
-            addFpBundle(dropId); // Initialize with one bundle
+            document.getElementById(`drops_${buId}`).insertAdjacentHTML('beforeend', html);
+            addFpBundle(dropId);
         }
 
+        // ─── FP BUNDLES (PRIMARY DROP) ────────────────────────────────────────────────
         function addFpBundle(dropId) {
             globalBundleCount++;
-            const bundleHtml = `
+            const html = `
                 <div class="fp-bundle bundle-entry-${dropId}">
-                    <span>FP Range:</span>
-                    <input type="number" class="fpStart" placeholder="Start (e.g. 7)" style="width: 80px;">
-                    <span>to</span>
-                    <input type="number" class="fpEnd" placeholder="End (e.g. 12)" style="width: 80px;">
+                    <span style="font-size:0.85em; color:#605e5c;">FP Range:</span>
+                    <input type="number" class="fpStart" placeholder="Start" style="width:75px;">
+                    <span>–</span>
+                    <input type="number" class="fpEnd"   placeholder="End"   style="width:75px;">
+                    <button class="btn-delete" title="Remove bundle" onclick="this.parentElement.remove(); refreshJsonPreview();">×</button>
                 </div>
             `;
-            document.getElementById(`bundles_${dropId}`).insertAdjacentHTML('beforeend', bundleHtml);
+            document.getElementById(`bundles_${dropId}`).insertAdjacentHTML('beforeend', html);
         }
 
+        // ─── SUB-BRANCHES ─────────────────────────────────────────────────────────────
         function addSubBranch(dropId) {
-            const subHtml = `
-                <div class="card sub-branch-card">
-                    <h5>Sub-Branch (Branch-on-Branch)</h5>
-                    <input type="text" class="subTargetId" placeholder="Target ID" value="CLS_Y">
-                    <input type="text" class="subLabel" placeholder="Sub-Branch Label" value="Sub-Branch Drop">
-                    <div class="fp-bundle">
-                        <span>FP Range:</span>
-                        <input type="number" class="subFpStart" placeholder="Start" style="width: 80px;">
-                        <span>to</span>
-                        <input type="number" class="subFpEnd" placeholder="End" style="width: 80px;">
+            globalSubCount++;
+            const subId = `sub_${globalSubCount}`;
+            const html = `
+                <div class="card sub-branch-card" id="${subId}">
+                    <div class="card-header">
+                        <h5>Sub-Branch (Branch-on-Branch)</h5>
+                        <button class="btn-delete" title="Delete sub-branch" onclick="document.getElementById('${subId}').remove(); refreshJsonPreview();">×</button>
                     </div>
-                    <select class="subDirection">
+                    <input type="text" class="subTargetId" placeholder="Target ID"         value="CLS_Y">
+                    <input type="text" class="subLabel"    placeholder="Sub-Branch Label"  value="Sub-Branch Drop">
+                    <div id="subbundles_${subId}" style="margin: 8px 0;"></div>
+                    <button class="btn-add" onclick="addSubFpBundle('${subId}')">+ Add FP Bundle</button>
+                    <select class="subDirection" style="display:block; margin-top:8px;">
                         <option value="down">Route Down (Vertical)</option>
                         <option value="east">Route East (Horizontal)</option>
                     </select>
                 </div>
             `;
-            document.getElementById(`sub_branches_${dropId}`).insertAdjacentHTML('beforeend', subHtml);
+            document.getElementById(`sub_branches_${dropId}`).insertAdjacentHTML('beforeend', html);
+            addSubFpBundle(subId);
         }
 
+        // ─── FP BUNDLES (SUB-BRANCH) ──────────────────────────────────────────────────
+        function addSubFpBundle(subId) {
+            const html = `
+                <div class="fp-bundle sub-bundle-entry-${subId}">
+                    <span style="font-size:0.85em; color:#605e5c;">FP Range:</span>
+                    <input type="number" class="subFpStart" placeholder="Start" style="width:75px;">
+                    <span>–</span>
+                    <input type="number" class="subFpEnd"   placeholder="End"   style="width:75px;">
+                    <button class="btn-delete" title="Remove bundle" onclick="this.parentElement.remove(); refreshJsonPreview();">×</button>
+                </div>
+            `;
+            document.getElementById(`subbundles_${subId}`).insertAdjacentHTML('beforeend', html);
+        }
+
+        // ─── PAYLOAD BUILDER (DOM-ORDER) ──────────────────────────────────────────────
+        // Reads BU cards in their current DOM order so reordering is reflected correctly.
         function buildPayloadObject() {
             const payload = {
                 system_name: document.getElementById('sysName').value,
                 trunk: {
                     total_fps: parseInt(document.getElementById('totalFPs').value),
                     west_node: document.getElementById('westNode').value,
-                    east_node: document.getElementById('eastNode').value
+                    east_node: document.getElementById('eastNode').value,
+                    colors:    []
                 },
                 branches: []
             };
-            
-            payload.trunk.colors = [];
+
             document.querySelectorAll('.color-rule').forEach(rule => {
                 const start = parseInt(rule.querySelector('.colorStart').value);
-                const end = parseInt(rule.querySelector('.colorEnd').value);
-                const hex = rule.querySelector('.colorHex').value;
+                const end   = parseInt(rule.querySelector('.colorEnd').value);
+                const hex   = rule.querySelector('.colorHex').value;
                 if (!isNaN(start) && !isNaN(end)) {
                     payload.trunk.colors.push({ fp_range: [start, end], color: hex });
                 }
             });
 
-            for (let i = 1; i <= buCount; i++) {
-                const buId = `BU${i}`;
-                const cardEl = document.getElementById(`card_${buId}`);
-                if (!cardEl) continue;
-
-                let branchObj = {
-                    id: buId,
-                    label: document.getElementById(`label_${buId}`).value,
-                    switch_type: cardEl.querySelector('.switchType').value, // <--- ADD THIS LINE
-                    drops: []
+            // Iterate BU cards in DOM order so ▲▼ reordering is reflected in output
+            document.querySelectorAll('.bu-card').forEach(cardEl => {
+                const buId = cardEl.dataset.buId;
+                const branchObj = {
+                    id:          buId,
+                    label:       cardEl.querySelector('.bu-label').value,
+                    switch_type: cardEl.querySelector('.switchType').value,
+                    drops:       []
                 };
 
-                const dropNodes = document.querySelectorAll(`.drop-entry-${buId}`);
-                dropNodes.forEach(node => {
-                    let dropData = {
-                        target_id: node.querySelector('.targetId').value,
-                        label: node.querySelector('.targetLabel').value,
-                        fp_ranges: [], // NEW array format
+                cardEl.querySelectorAll('.drop-card').forEach(dropEl => {
+                    const dropData = {
+                        target_id:   dropEl.querySelector('.targetId').value,
+                        label:       dropEl.querySelector('.targetLabel').value,
+                        fp_ranges:   [],
                         sub_branches: []
                     };
 
-                    // Extract all FP Bundles for this drop
-                    const bundleNodes = node.querySelectorAll('.fp-bundle[class*="bundle-entry-"]');
-                    bundleNodes.forEach(bNode => {
-                        const start = parseInt(bNode.querySelector('.fpStart').value);
-                        const end = parseInt(bNode.querySelector('.fpEnd').value);
-                        if (!isNaN(start) && !isNaN(end)) {
-                            dropData.fp_ranges.push([start, end]);
-                        }
+                    dropEl.querySelectorAll(`.bundle-entry-${dropEl.id}`).forEach(bEl => {
+                        const s = parseInt(bEl.querySelector('.fpStart').value);
+                        const e = parseInt(bEl.querySelector('.fpEnd').value);
+                        if (!isNaN(s) && !isNaN(e)) dropData.fp_ranges.push([s, e]);
                     });
 
-                    // Extract Sub-Branches
-                    const subNodes = node.querySelectorAll('.sub-branch-card');
-                    subNodes.forEach(subNode => {
+                    dropEl.querySelectorAll('.sub-branch-card').forEach(subEl => {
+                        const subRanges = [];
+                        subEl.querySelectorAll(`.sub-bundle-entry-${subEl.id}`).forEach(bEl => {
+                            const s = parseInt(bEl.querySelector('.subFpStart').value);
+                            const e = parseInt(bEl.querySelector('.subFpEnd').value);
+                            if (!isNaN(s) && !isNaN(e)) subRanges.push([s, e]);
+                        });
                         dropData.sub_branches.push({
-                            target_id: subNode.querySelector('.subTargetId').value,
-                            label: subNode.querySelector('.subLabel').value,
-                            fp_range: [ // Sub-branches still use flat arrays for now
-                                parseInt(subNode.querySelector('.subFpStart').value) || 0,
-                                parseInt(subNode.querySelector('.subFpEnd').value) || 0
-                            ],
-                            direction: subNode.querySelector('.subDirection').value
+                            target_id: subEl.querySelector('.subTargetId').value,
+                            label:     subEl.querySelector('.subLabel').value,
+                            fp_ranges: subRanges,
+                            direction: subEl.querySelector('.subDirection').value
                         });
                     });
+
                     branchObj.drops.push(dropData);
                 });
                 payload.branches.push(branchObj);
-            }
+            });
+
             return payload;
         }
 
+        // ─── IMPORT / EXPORT ──────────────────────────────────────────────────────────
         function exportConfig() {
             const payload = buildPayloadObject();
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
             const a = document.createElement('a');
-            a.href = dataStr;
+            a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
             a.download = `${payload.system_name || 'topology'}_config.json`;
             a.click();
         }
@@ -249,144 +662,87 @@
         function importConfig(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const config = JSON.parse(e.target.result);
-                    rebuildUI(config);
-                } catch (err) {
-                    alert("Invalid JSON file.");
-                }
+            reader.onload = e => {
+                try { rebuildUI(JSON.parse(e.target.result)); }
+                catch (_) { showError("Invalid JSON file — could not import config."); }
             };
             reader.readAsText(file);
             event.target.value = '';
         }
 
         function rebuildUI(config) {
+            clearError();
+            clearFieldErrors();
             document.getElementById('branchesContainer').innerHTML = '';
-            buCount = 0;
-            globalDropCount = 0;
-            globalBundleCount = 0;
+            buCount = globalDropCount = globalBundleCount = globalSubCount = 0;
 
-            document.getElementById('sysName').value = config.system_name || '';
-            document.getElementById('totalFPs').value = config.trunk?.total_fps || 24;
-            document.getElementById('westNode').value = config.trunk?.west_node || '';
-            document.getElementById('eastNode').value = config.trunk?.east_node || '';
-            
+            document.getElementById('sysName').value   = config.system_name || '';
+            document.getElementById('totalFPs').value  = config.trunk?.total_fps || 24;
+            document.getElementById('westNode').value  = config.trunk?.west_node || '';
+            document.getElementById('eastNode').value  = config.trunk?.east_node || '';
+
             document.getElementById('colorRulesContainer').innerHTML = '';
-            (config.trunk?.colors || []).forEach(colorRule => {
+            (config.trunk?.colors || []).forEach(rule => {
                 addColorRule();
-                const ruleNodes = document.querySelectorAll('.color-rule');
-                const currentRuleEl = ruleNodes[ruleNodes.length - 1];
-                currentRuleEl.querySelector('.colorStart').value = colorRule.fp_range[0];
-                currentRuleEl.querySelector('.colorEnd').value = colorRule.fp_range[1];
-                currentRuleEl.querySelector('.colorHex').value = colorRule.color;
+                const el = document.querySelectorAll('.color-rule');
+                const r  = el[el.length - 1];
+                r.querySelector('.colorStart').value = rule.fp_range[0];
+                r.querySelector('.colorEnd').value   = rule.fp_range[1];
+                r.querySelector('.colorHex').value   = rule.color;
             });
 
             (config.branches || []).forEach(bu => {
                 addBranchingUnit();
-                const currentBuId = `BU${buCount}`;
-                document.getElementById(`label_${currentBuId}`).value = bu.label || '';
-                
-                const cardEl = document.getElementById(`card_${currentBuId}`);
-                if (bu.switch_type) {
-                    cardEl.querySelector('.switchType').value = bu.switch_type;
-                }
+                const buId  = `BU${buCount}`;
+                const cardEl = document.getElementById(`card_${buId}`);
+                cardEl.querySelector('.bu-label').value  = bu.label || '';
+                if (bu.switch_type) cardEl.querySelector('.switchType').value = bu.switch_type;
 
                 (bu.drops || []).forEach(drop => {
-                    addDrop(currentBuId);
-                    const currentDropId = `drop_${globalDropCount}`;
-                    const dropEl = document.getElementById(currentDropId);
-                    
-                    
-                    dropEl.querySelector('.targetId').value = drop.target_id || '';
+                    addDrop(buId);
+                    const dropId = `drop_${globalDropCount}`;
+                    const dropEl = document.getElementById(dropId);
+                    dropEl.querySelector('.targetId').value    = drop.target_id || '';
                     dropEl.querySelector('.targetLabel').value = drop.label || '';
-                    
-                    // Clear the default initialized bundle
-                    document.getElementById(`bundles_${currentDropId}`).innerHTML = '';
 
-                    // Backwards compatibility: Handle both new fp_ranges array and old fp_range flat array
+                    document.getElementById(`bundles_${dropId}`).innerHTML = '';
                     const ranges = drop.fp_ranges || (drop.fp_range ? [drop.fp_range] : []);
-                    
                     ranges.forEach(r => {
-                        addFpBundle(currentDropId);
-                        const bundleNodes = dropEl.querySelectorAll('.fp-bundle[class*="bundle-entry-"]');
-                        const currentBundleEl = bundleNodes[bundleNodes.length - 1];
-                        currentBundleEl.querySelector('.fpStart').value = r[0];
-                        currentBundleEl.querySelector('.fpEnd').value = r[1];
+                        addFpBundle(dropId);
+                        const nodes = dropEl.querySelectorAll(`.bundle-entry-${dropId}`);
+                        const bEl   = nodes[nodes.length - 1];
+                        bEl.querySelector('.fpStart').value = r[0];
+                        bEl.querySelector('.fpEnd').value   = r[1];
                     });
 
                     (drop.sub_branches || []).forEach(sub => {
-                        addSubBranch(currentDropId);
-                        const subNodes = dropEl.querySelectorAll('.sub-branch-card');
-                        const currentSubEl = subNodes[subNodes.length - 1]; 
+                        addSubBranch(dropId);
+                        const subId = `sub_${globalSubCount}`;
+                        const subEl = document.getElementById(subId);
+                        subEl.querySelector('.subTargetId').value  = sub.target_id || '';
+                        subEl.querySelector('.subLabel').value     = sub.label || '';
+                        subEl.querySelector('.subDirection').value = sub.direction || 'down';
 
-                        currentSubEl.querySelector('.subTargetId').value = sub.target_id || '';
-                        currentSubEl.querySelector('.subLabel').value = sub.label || '';
-                        currentSubEl.querySelector('.subFpStart').value = sub.fp_range[0];
-                        currentSubEl.querySelector('.subFpEnd').value = sub.fp_range[1];
-                        currentSubEl.querySelector('.subDirection').value = sub.direction || 'down';
+                        document.getElementById(`subbundles_${subId}`).innerHTML = '';
+                        const subRanges = sub.fp_ranges || (sub.fp_range ? [sub.fp_range] : []);
+                        subRanges.forEach(r => {
+                            addSubFpBundle(subId);
+                            const nodes = subEl.querySelectorAll(`.sub-bundle-entry-${subId}`);
+                            const bEl   = nodes[nodes.length - 1];
+                            bEl.querySelector('.subFpStart').value = r[0];
+                            bEl.querySelector('.subFpEnd').value   = r[1];
+                        });
                     });
                 });
             });
-        }
-        
-        async function copyDiagramXML(btnElement) {
-            const payload = buildPayloadObject();
-            const originalText = btnElement.innerText;
-            btnElement.innerText = "Generating...";
 
-            try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                if (response.ok) {
-                    // Instead of downloading a Blob, we read the response as raw text
-                    const xmlText = await response.text();
-                    // Write it directly to the system clipboard
-                    await navigator.clipboard.writeText(xmlText);
-                    
-                    // Visual feedback
-                    btnElement.innerText = "? Copied!";
-                    setTimeout(() => btnElement.innerText = originalText, 2500);
-                } else {
-                    const errorText = await response.text();
-                    alert(`Generation Error: ${errorText}`);
-                    btnElement.innerText = originalText;
-                }
-            } catch (err) {
-                alert(`Network Error: Ensure the Flask backend is running. Details: ${err}`);
-                btnElement.innerText = originalText;
-            }
+            updateColorSwatch();
+            refreshJsonPreview();
         }
 
-        async function generateDiagram() {
-            const payload = buildPayloadObject();
-            try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${payload.system_name}.drawio`;
-                    a.click();
-                } else {
-                    const errorText = await response.text();
-                    alert(`Generation Error: ${errorText}`);
-                }
-            } catch (err) {
-                alert(`Network Error: Ensure the Flask backend is running. Details: ${err}`);
-            }
-        }
+        // ─── INIT ─────────────────────────────────────────────────────────────────────
+        updateColorSwatch();
     </script>
 </body>
 </html>
