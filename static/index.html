@@ -8,6 +8,7 @@
         .card { border: 1px solid #ccc; padding: 15px; margin-top: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .drop-card { border-left: 4px solid #0050ef; margin-left: 20px; background: #fafafa; }
         .sub-branch-card { border-left: 4px solid #107c10; margin-left: 20px; background: #fff; margin-top: 10px; }
+        .fp-bundle { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
         input, select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         button { padding: 8px 12px; margin-top: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; }
         .btn-add { background-color: #e1dfdd; color: #333; border: 1px solid #ccc; }
@@ -19,6 +20,10 @@
         h3, h4, h5 { margin-top: 0; color: #323130; }
         .action-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
         .file-controls { display: flex; gap: 10px; }
+        .instructions { background-color: #e8f4f8; border-left: 4px solid #0078d4; padding: 15px; margin-top: 30px; border-radius: 4px; }
+        .instructions h3 { margin-top: 0; color: #0078d4; }
+        .instructions ol { padding-left: 20px; }
+        .instructions li { margin-bottom: 8px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -31,6 +36,11 @@
         <input type="number" id="totalFPs" placeholder="Total Trunk FPs" value="24" style="width: 120px;">
         <input type="text" id="westNode" placeholder="West Node Label" value="CLS 1\n(West Trunk)">
         <input type="text" id="eastNode" placeholder="East Node Label" value="CLS 3\n(East Trunk)">
+        <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
+            <h4>Trunk Color Mapping</h4>
+            <div id="colorRulesContainer"></div>
+            <button class="btn-add" style="font-size: 0.85em;" onclick="addColorRule()">+ Add Color Override</button>
+        </div>
     </div>
 
     <div id="branchesContainer"></div>
@@ -39,16 +49,32 @@
     
     <div class="action-bar">
         <div class="file-controls">
-            <button class="btn-action" onclick="exportConfig()">Save Config</button>
-            <button class="btn-action" onclick="document.getElementById('fileInput').click()">Load Config</button>
+            <button class="btn-action" onclick="exportConfig()">Export JSON</button>
+            <button class="btn-action" onclick="document.getElementById('fileInput').click()">Import JSON</button>
             <input type="file" id="fileInput" style="display: none;" accept=".json" onchange="importConfig(event)">
         </div>
-        <button class="btn-primary" onclick="generateDiagram()">Generate Draw.io Diagram</button>
+        <div>
+            <button class="btn-primary" style="background-color: #d24726; margin-right: 10px;" onclick="copyDiagramXML(this)">Copy XML</button>
+            <button class="btn-primary" onclick="generateDiagram()">Download .drawio</button>
+        </div>
+    </div>
+
+    <div class="instructions">
+        <h3>How to Generate a Topology</h3>
+        <ol>
+            <li><strong>Define the Trunk:</strong> Set the total fiber pairs (FPs) for the main continuous cable.</li>
+            <li><strong>Add Branching Units (BUs):</strong> Click "+ Add Branching Unit" for every physical BU sitting on the main trunk.</li>
+            <li><strong>Assign Destinations (Drops):</strong> Inside each BU, add a "Branch Drop" to represent the target station (e.g., CLS 5).</li>
+            <li><strong>Map the Fibers:</strong> For each drop, specify which FPs route there. If non-contiguous pairs drop to the same location (e.g., 7-12 AND 19-24), click "+ Add FP Bundle" inside that drop.</li>
+            <li><strong>Sub-Branching (Optional):</strong> If a drop hits a secondary BU before reaching a terminal station, use the "+ Add Sub-Branch" feature to tier the diagram.</li>
+            <li><strong>Generate:</strong> Click "Generate Draw.io Diagram" to download the XML schema, then open it in <a href="https://app.diagrams.net/" target="_blank">Draw.io</a>.</li>
+        </ol>
     </div>
 
     <script>
         let buCount = 0;
         let globalDropCount = 0; 
+        let globalBundleCount = 0;
 
         function addBranchingUnit() {
             buCount++;
@@ -63,23 +89,53 @@
             `;
             document.getElementById('branchesContainer').insertAdjacentHTML('beforeend', html);
         }
+        
+        function addColorRule() {
+            const html = `
+                <div class="fp-bundle color-rule">
+                    <span>FPs:</span>
+                    <input type="number" class="colorStart" placeholder="Start" style="width: 60px;">
+                    <span>to</span>
+                    <input type="number" class="colorEnd" placeholder="End" style="width: 60px;">
+                    <input type="color" class="colorHex" value="#ff0000" style="padding: 0; width: 40px; height: 30px; cursor: pointer;">
+                </div>
+            `;
+            document.getElementById('colorRulesContainer').insertAdjacentHTML('beforeend', html);
+        }
 
         function addDrop(buId) {
             globalDropCount++;
             const dropId = `drop_${globalDropCount}`;
             const dropHtml = `
                 <div class="card drop-card drop-entry-${buId}" id="${dropId}">
-                    <h5>Primary Drop</h5>
-                    <input type="text" class="targetId" placeholder="Target ID (e.g. CLS2)" value="CLS_X">
+                    <h5>Destination (Primary Drop)</h5>
+                    <input type="text" class="targetId" placeholder="Target ID (e.g. CLS5)" value="CLS_X">
                     <input type="text" class="targetLabel" placeholder="Drop Label" value="Branch Drop">
-                    <input type="number" class="fpStart" placeholder="FP Start" style="width: 80px;">
-                    <input type="number" class="fpEnd" placeholder="FP End" style="width: 80px;">
                     
-                    <div id="sub_branches_${dropId}"></div>
-                    <button class="btn-add" style="font-size: 0.9em;" onclick="addSubBranch('${dropId}')">+ Add Sub-Branch</button>
+                    <div id="bundles_${dropId}" style="margin: 10px 0;">
+                        </div>
+                    
+                    <button class="btn-add" style="font-size: 0.85em; margin-top: 0;" onclick="addFpBundle('${dropId}')">+ Add FP Bundle</button>
+                    
+                    <div id="sub_branches_${dropId}" style="margin-top: 15px;"></div>
+                    <button class="btn-add" style="font-size: 0.85em;" onclick="addSubBranch('${dropId}')">+ Add Sub-Branch</button>
                 </div>
             `;
             document.getElementById(`drops_${buId}`).insertAdjacentHTML('beforeend', dropHtml);
+            addFpBundle(dropId); // Initialize with one bundle
+        }
+
+        function addFpBundle(dropId) {
+            globalBundleCount++;
+            const bundleHtml = `
+                <div class="fp-bundle bundle-entry-${dropId}">
+                    <span>FP Range:</span>
+                    <input type="number" class="fpStart" placeholder="Start (e.g. 7)" style="width: 80px;">
+                    <span>to</span>
+                    <input type="number" class="fpEnd" placeholder="End (e.g. 12)" style="width: 80px;">
+                </div>
+            `;
+            document.getElementById(`bundles_${dropId}`).insertAdjacentHTML('beforeend', bundleHtml);
         }
 
         function addSubBranch(dropId) {
@@ -88,8 +144,12 @@
                     <h5>Sub-Branch (Branch-on-Branch)</h5>
                     <input type="text" class="subTargetId" placeholder="Target ID" value="CLS_Y">
                     <input type="text" class="subLabel" placeholder="Sub-Branch Label" value="Sub-Branch Drop">
-                    <input type="number" class="subFpStart" placeholder="FP Start" style="width: 80px;">
-                    <input type="number" class="subFpEnd" placeholder="FP End" style="width: 80px;">
+                    <div class="fp-bundle">
+                        <span>FP Range:</span>
+                        <input type="number" class="subFpStart" placeholder="Start" style="width: 80px;">
+                        <span>to</span>
+                        <input type="number" class="subFpEnd" placeholder="End" style="width: 80px;">
+                    </div>
                     <select class="subDirection">
                         <option value="down">Route Down (Vertical)</option>
                         <option value="east">Route East (Horizontal)</option>
@@ -109,6 +169,16 @@
                 },
                 branches: []
             };
+            
+            payload.trunk.colors = [];
+            document.querySelectorAll('.color-rule').forEach(rule => {
+                const start = parseInt(rule.querySelector('.colorStart').value);
+                const end = parseInt(rule.querySelector('.colorEnd').value);
+                const hex = rule.querySelector('.colorHex').value;
+                if (!isNaN(start) && !isNaN(end)) {
+                    payload.trunk.colors.push({ fp_range: [start, end], color: hex });
+                }
+            });
 
             for (let i = 1; i <= buCount; i++) {
                 const buId = `BU${i}`;
@@ -125,19 +195,27 @@
                     let dropData = {
                         target_id: node.querySelector('.targetId').value,
                         label: node.querySelector('.targetLabel').value,
-                        fp_range: [
-                            parseInt(node.querySelector('.fpStart').value) || 0,
-                            parseInt(node.querySelector('.fpEnd').value) || 0
-                        ],
+                        fp_ranges: [], // NEW array format
                         sub_branches: []
                     };
 
+                    // Extract all FP Bundles for this drop
+                    const bundleNodes = node.querySelectorAll('.fp-bundle[class*="bundle-entry-"]');
+                    bundleNodes.forEach(bNode => {
+                        const start = parseInt(bNode.querySelector('.fpStart').value);
+                        const end = parseInt(bNode.querySelector('.fpEnd').value);
+                        if (!isNaN(start) && !isNaN(end)) {
+                            dropData.fp_ranges.push([start, end]);
+                        }
+                    });
+
+                    // Extract Sub-Branches
                     const subNodes = node.querySelectorAll('.sub-branch-card');
                     subNodes.forEach(subNode => {
                         dropData.sub_branches.push({
                             target_id: subNode.querySelector('.subTargetId').value,
                             label: subNode.querySelector('.subLabel').value,
-                            fp_range: [
+                            fp_range: [ // Sub-branches still use flat arrays for now
                                 parseInt(subNode.querySelector('.subFpStart').value) || 0,
                                 parseInt(subNode.querySelector('.subFpEnd').value) || 0
                             ],
@@ -151,8 +229,6 @@
             return payload;
         }
 
-        // --- NEW DATA PERSISTENCE FUNCTIONS ---
-        
         function exportConfig() {
             const payload = buildPayloadObject();
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
@@ -176,22 +252,30 @@
                 }
             };
             reader.readAsText(file);
-            event.target.value = ''; // Reset file input so same file can be loaded again if needed
+            event.target.value = '';
         }
 
         function rebuildUI(config) {
-            // 1. Wipe current state
             document.getElementById('branchesContainer').innerHTML = '';
             buCount = 0;
             globalDropCount = 0;
+            globalBundleCount = 0;
 
-            // 2. Rebuild Trunk
             document.getElementById('sysName').value = config.system_name || '';
             document.getElementById('totalFPs').value = config.trunk?.total_fps || 24;
             document.getElementById('westNode').value = config.trunk?.west_node || '';
             document.getElementById('eastNode').value = config.trunk?.east_node || '';
+            
+            document.getElementById('colorRulesContainer').innerHTML = '';
+            (config.trunk?.colors || []).forEach(colorRule => {
+                addColorRule();
+                const ruleNodes = document.querySelectorAll('.color-rule');
+                const currentRuleEl = ruleNodes[ruleNodes.length - 1];
+                currentRuleEl.querySelector('.colorStart').value = colorRule.fp_range[0];
+                currentRuleEl.querySelector('.colorEnd').value = colorRule.fp_range[1];
+                currentRuleEl.querySelector('.colorHex').value = colorRule.color;
+            });
 
-            // 3. Rebuild Branches & Sub-Branches
             (config.branches || []).forEach(bu => {
                 addBranchingUnit();
                 const currentBuId = `BU${buCount}`;
@@ -204,13 +288,25 @@
                     
                     dropEl.querySelector('.targetId').value = drop.target_id || '';
                     dropEl.querySelector('.targetLabel').value = drop.label || '';
-                    dropEl.querySelector('.fpStart').value = drop.fp_range[0];
-                    dropEl.querySelector('.fpEnd').value = drop.fp_range[1];
+                    
+                    // Clear the default initialized bundle
+                    document.getElementById(`bundles_${currentDropId}`).innerHTML = '';
+
+                    // Backwards compatibility: Handle both new fp_ranges array and old fp_range flat array
+                    const ranges = drop.fp_ranges || (drop.fp_range ? [drop.fp_range] : []);
+                    
+                    ranges.forEach(r => {
+                        addFpBundle(currentDropId);
+                        const bundleNodes = dropEl.querySelectorAll('.fp-bundle[class*="bundle-entry-"]');
+                        const currentBundleEl = bundleNodes[bundleNodes.length - 1];
+                        currentBundleEl.querySelector('.fpStart').value = r[0];
+                        currentBundleEl.querySelector('.fpEnd').value = r[1];
+                    });
 
                     (drop.sub_branches || []).forEach(sub => {
                         addSubBranch(currentDropId);
                         const subNodes = dropEl.querySelectorAll('.sub-branch-card');
-                        const currentSubEl = subNodes[subNodes.length - 1]; // Get the one we just added
+                        const currentSubEl = subNodes[subNodes.length - 1]; 
 
                         currentSubEl.querySelector('.subTargetId').value = sub.target_id || '';
                         currentSubEl.querySelector('.subLabel').value = sub.label || '';
@@ -221,19 +317,47 @@
                 });
             });
         }
-
-        // --- END PERSISTENCE ---
-
-        async function generateDiagram() {
+        
+        async function copyDiagramXML(btnElement) {
             const payload = buildPayloadObject();
-            
+            const originalText = btnElement.innerText;
+            btnElement.innerText = "Generating...";
+
             try {
                 const response = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                
+                if (response.ok) {
+                    // Instead of downloading a Blob, we read the response as raw text
+                    const xmlText = await response.text();
+                    // Write it directly to the system clipboard
+                    await navigator.clipboard.writeText(xmlText);
+                    
+                    // Visual feedback
+                    btnElement.innerText = "? Copied!";
+                    setTimeout(() => btnElement.innerText = originalText, 2500);
+                } else {
+                    const errorText = await response.text();
+                    alert(`Generation Error: ${errorText}`);
+                    btnElement.innerText = originalText;
+                }
+            } catch (err) {
+                alert(`Network Error: Ensure the Flask backend is running. Details: ${err}`);
+                btnElement.innerText = originalText;
+            }
+        }
 
+        async function generateDiagram() {
+            const payload = buildPayloadObject();
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
