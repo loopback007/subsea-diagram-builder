@@ -81,7 +81,13 @@
             const buId = `BU${buCount}`;
             const html = `
                 <div class="card" id="card_${buId}">
-                    <h4>Branching Unit: ${buId}</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4>Branching Unit: ${buId}</h4>
+                        <select class="switchType" style="background-color: #f0f2f5; border: 1px solid #ccc; border-radius: 4px; padding: 4px;">
+                            <option value="1x1">1x1 Switch (Direct Drop)</option>
+                            <option value="1x2">1x2 Switch (Optical Split)</option>
+                        </select>
+                    </div>
                     <input type="text" id="label_${buId}" placeholder="BU Label" value="BU ${buCount}">
                     <div id="drops_${buId}"></div>
                     <button class="btn-add" onclick="addDrop('${buId}')">+ Add Branch Drop</button>
@@ -182,11 +188,13 @@
 
             for (let i = 1; i <= buCount; i++) {
                 const buId = `BU${i}`;
-                if (!document.getElementById(`card_${buId}`)) continue;
+                const cardEl = document.getElementById(`card_${buId}`);
+                if (!cardEl) continue;
 
                 let branchObj = {
                     id: buId,
                     label: document.getElementById(`label_${buId}`).value,
+                    switch_type: cardEl.querySelector('.switchType').value, // <--- ADD THIS LINE
                     drops: []
                 };
 
@@ -280,11 +288,17 @@
                 addBranchingUnit();
                 const currentBuId = `BU${buCount}`;
                 document.getElementById(`label_${currentBuId}`).value = bu.label || '';
+                
+                const cardEl = document.getElementById(`card_${currentBuId}`);
+                if (bu.switch_type) {
+                    cardEl.querySelector('.switchType').value = bu.switch_type;
+                }
 
                 (bu.drops || []).forEach(drop => {
                     addDrop(currentBuId);
                     const currentDropId = `drop_${globalDropCount}`;
                     const dropEl = document.getElementById(currentDropId);
+                    
                     
                     dropEl.querySelector('.targetId').value = drop.target_id || '';
                     dropEl.querySelector('.targetLabel').value = drop.label || '';
