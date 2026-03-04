@@ -26,10 +26,14 @@ def generate_from_config(config):
     trunk_fps = config["trunk"]["total_fps"]
     seen_target_ids = set()
 
+    # Track FPs consumed by fixed-mode BUs (in config order) so we can catch
+    # any later BU that tries to route a fibre that has already been terminated.
+    fixed_consumed = {}   # fp_number -> bu_id that consumed it
+
     for bu in config["branches"]:
+        is_fixed = bu.get("routing_mode") == "fixed"
+
         for drop in bu["drops"]:
-            # Duplicate target_id check — two nodes with the same ID would silently
-            # overwrite each other in the diagram dict.
             tid = drop.get("target_id", "")
             if tid in seen_target_ids:
                 raise ValueError(
@@ -55,6 +59,15 @@ def generate_from_config(config):
                         f"BU '{bu['id']}' drop to '{tid}' references FP {end}, "
                         f"but trunk only has {trunk_fps} FPs."
                     )
+                for i in range(start, end + 1):
+                    if i in fixed_consumed:
+                        raise ValueError(
+                            f"FP {i} in BU '{bu['id']}' drop to '{tid}' was already "
+                            f"terminated at BU '{fixed_consumed[i]}' (fixed fibre routing). "
+                            f"A fixed FP cannot be routed through any subsequent BU."
+                        )
+                    if is_fixed:
+                        fixed_consumed[i] = bu["id"]
 
             for sub in drop.get("sub_branches", []):
                 sub_tid = sub.get("target_id", "")
@@ -112,8 +125,15 @@ def generate_from_config(config):
             fp_colors[i] = color_hex
 
     # --- HELPERS ---
-    def add_node(node_id, x, y, label, height=TRUNK_NODE_HEIGHT):
-        style = "rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;"
+    def add_node(node_id, x, y, label, height=TRUNK_NODE_HEIGHT, node_type="trunk"):
+        # Label positioning varies by node role:
+        #   trunk/bu  → top-center (clear of the dense FP lines running through the node)
+        #   drop/sub  → top-left (standard for smaller destination boxes)
+        if node_type == "drop" or node_type == "sub":
+            align_style = "verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;"
+        else:
+            align_style = "verticalAlign=top;align=center;spacingTop=8;"
+        style = f"rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;{align_style}"
         cell = ET.SubElement(root, 'mxCell', id=node_id, value=label, style=style, vertex="1", parent="1")
         ET.SubElement(cell, 'mxGeometry', x=str(x), y=str(y), width=str(NODE_WIDTH), height=str(height), **{'as': 'geometry'})
 
@@ -135,11 +155,11 @@ def generate_from_config(config):
         ET.SubElement(cell, 'mxGeometry', x=str(x), y=str(y - 7), width=str(20), height=str(15), **{'as': 'geometry'})
 
     # --- NODE LAYOUT ---
-    nodes["WEST"] = {"x": 50, "y": 50, "label": config["trunk"]["west_node"], "height": TRUNK_NODE_HEIGHT}
+    nodes["WEST"] = {"x": 50, "y": 50, "label": config["trunk"]["west_node"], "height": TRUNK_NODE_HEIGHT, "node_type": "trunk"}
     current_col_x = 50 + NODE_WIDTH + LANE_WIDTH
 
     for bu in config["branches"]:
-        nodes[bu["id"]] = {"x": current_col_x, "y": 50, "label": bu["label"], "height": TRUNK_NODE_HEIGHT}
+        nodes[bu["id"]] = {"x": current_col_x, "y": 50, "label": bu["label"], "height": TRUNK_NODE_HEIGHT, "node_type": "trunk"}
         current_drop_y = 50 + TRUNK_NODE_HEIGHT + DROP_DEPTH
 
         # Pre-calculate X lanes for horizontal centering
@@ -182,32 +202,63 @@ def generate_from_config(config):
 
             nodes[drop["target_id"]] = {
                 "x": aligned_drop_x, "y": current_drop_y,
-                "label": drop["label"], "height": drop_height
+                "label": drop["label"], "height": drop_height,
+                "node_type": "drop"
             }
 
             for sub in drop.get("sub_branches", []):
+                # Size sub-branch nodes by their own FP count so lines never overflow —
+                # applies to both east and south directions.
+                sub_all_fps = []
+                for sub_r in get_ranges(sub):
+                    sub_all_fps.extend(range(sub_r[0], sub_r[1] + 1))
+                if sub_all_fps:
+                    sub_fp_spread = max(sub_all_fps) - min(sub_all_fps)
+                    sub_height = max(100, (sub_fp_spread * FP_SPACING) + 60)
+                else:
+                    sub_height = 100
+
                 if sub.get("direction") == "east":
                     sub_x = aligned_drop_x + NODE_WIDTH + (LANE_WIDTH * 0.75)
-                    nodes[sub["target_id"]] = {"x": sub_x, "y": current_drop_y, "label": sub["label"], "height": 100}
+                    nodes[sub["target_id"]] = {"x": sub_x, "y": current_drop_y, "label": sub["label"], "height": sub_height, "node_type": "sub"}
                 else:
                     sub_y = current_drop_y + drop_height + DROP_DEPTH
-                    nodes[sub["target_id"]] = {"x": aligned_drop_x, "y": sub_y, "label": sub["label"], "height": 100}
+                    nodes[sub["target_id"]] = {"x": aligned_drop_x, "y": sub_y, "label": sub["label"], "height": sub_height, "node_type": "sub"}
 
             current_drop_y += drop_height + DROP_DEPTH
 
         current_col_x += NODE_WIDTH + LANE_WIDTH
 
-    nodes["EAST"] = {"x": current_col_x, "y": 50, "label": config["trunk"]["east_node"], "height": TRUNK_NODE_HEIGHT}
+    nodes["EAST"] = {"x": current_col_x, "y": 50, "label": config["trunk"]["east_node"], "height": TRUNK_NODE_HEIGHT, "node_type": "trunk"}
 
     for key, data in nodes.items():
-        add_node(key, data["x"], data["y"], data["label"], data["height"])
+        add_node(key, data["x"], data["y"], data["label"], data["height"], data.get("node_type", "trunk"))
 
     # --- TRUNK LINES ---
+    # For express FPs: draw the full span WEST → EAST.
+    # For fixed FPs: the line terminates at the right edge of the consuming BU —
+    # the fibre is physically dropped there and does not continue east.
+    # trunk_end_x maps each FP to its easternmost x coordinate.
+    trunk_end_x = {i: nodes["EAST"]["x"] for i in range(1, trunk_fps + 1)}
+    for bu in config["branches"]:
+        if bu.get("routing_mode") == "fixed":
+            bu_right_x = nodes[bu["id"]]["x"] + NODE_WIDTH
+            for drop in bu["drops"]:
+                for r in get_ranges(drop):
+                    for i in range(r[0], r[1] + 1):
+                        # Only update if not already terminated by an earlier BU
+                        if trunk_end_x[i] == nodes["EAST"]["x"]:
+                            trunk_end_x[i] = bu_right_x
+
     for i in range(1, trunk_fps + 1):
-        y_offset = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
-        add_line(f"fp_{i}_trunk", nodes["WEST"]["x"] + NODE_WIDTH, y_offset, nodes["EAST"]["x"], y_offset, fp_colors[i])
+        y_offset  = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
+        end_x     = trunk_end_x[i]
+        add_line(f"fp_{i}_trunk", nodes["WEST"]["x"] + NODE_WIDTH, y_offset,
+                 end_x, y_offset, fp_colors[i])
         add_label(i, nodes["WEST"]["x"] + NODE_WIDTH - 20, y_offset)
-        add_label(i, nodes["EAST"]["x"] + 10, y_offset)
+        # Only label the east end if the trunk line actually reaches EAST
+        if end_x >= nodes["EAST"]["x"]:
+            add_label(i, nodes["EAST"]["x"] + 10, y_offset)
 
     # --- RENDER DROP ROUTING ---
     for bu in config["branches"]:
@@ -250,16 +301,18 @@ def generate_from_config(config):
                         fp_max_y[i] = max(fp_max_y.get(i, 0), sub_bu_y)
 
                         for sub in drop["sub_branches"]:
-                            # Iterate all sub-branch FP bundles via get_ranges() —
-                            # handles both new fp_ranges and legacy fp_range transparently.
                             for sub_r in get_ranges(sub):
                                 if sub_r[0] <= i <= sub_r[1]:
                                     if sub.get("direction") == "east":
                                         target_wall_x = nodes[sub["target_id"]]["x"]
-                                        for x_coord in fp_x_coords.get(i, []):
+                                        for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
+                                            # For 1x2 switches, offset each paired line by 3px on y
+                                            # so both fibres are visually distinct (mirrors the x1/x2
+                                            # side-by-side treatment used on vertical segments).
+                                            east_y = sub_bu_y + x_idx * 3
                                             fp_sub_lines.append((
-                                                f"fp_{i}_sub_east_{drop['target_id']}_{sub['target_id']}_{x_coord}",
-                                                x_coord, sub_bu_y, target_wall_x, sub_bu_y, fp_colors[i]
+                                                f"fp_{i}_sub_east_{drop['target_id']}_{sub['target_id']}_{x_idx}",
+                                                x_coord, east_y, target_wall_x, east_y, fp_colors[i]
                                             ))
                                     else:
                                         terminal_y = nodes[sub["target_id"]]["y"]
@@ -270,6 +323,22 @@ def generate_from_config(config):
             for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
                 add_line(f"fp_{i}_{bu['id']}_main_bus_{x_idx}", x_coord, trunk_y, x_coord, max_y, fp_colors[i])
                 add_dot(f"dot_{i}_{bu['id']}_{x_idx}", x_coord, trunk_y, fp_colors[i])
+
+        # Drop-entry intersection dots — drawn at the exact y where each FP vertical
+        # line branches off toward a sub-branch, inside the drop node body.
+        # This is the same sub_bu_y used when drawing the east horizontal lines.
+        for drop in bu["drops"]:
+            if not drop.get("sub_branches"):
+                continue
+            for r in get_ranges(drop):
+                start_fp, end_fp = r
+                for i in range(start_fp, end_fp + 1):
+                    junction_y = nodes[drop["target_id"]]["y"] + ((i - start_fp) * FP_SPACING) + 30
+                    for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
+                        add_dot(
+                            f"dot_drop_entry_{i}_{drop['target_id']}_{x_idx}",
+                            x_coord, junction_y, fp_colors[i]
+                        )
 
         for line_args in fp_sub_lines:
             add_line(*line_args)

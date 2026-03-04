@@ -191,7 +191,9 @@
         </div>
         <div>
             <button class="btn-primary" style="background-color: #d24726; margin-right: 10px;" onclick="copyDiagramXML(this)">Copy XML</button>
-            <button class="btn-primary" onclick="generateDiagram(this)">Download .drawio</button>
+            <button class="btn-primary" style="margin-right: 6px;" onclick="generateDiagram(this)">↓ .drawio</button>
+            <button class="btn-primary" style="background-color: #5c2d91; margin-right: 6px;" onclick="downloadSVG(this)">↓ SVG</button>
+            <button class="btn-primary" style="background-color: #005a9e;" onclick="downloadPNG(this)">↓ PNG</button>
         </div>
     </div>
 
@@ -353,6 +355,23 @@
 
                 if (drops.length === 0) {
                     errors.push(`${buLabel} has no drops.`);
+                }
+
+                // Fixed routing BUs must have at least one FP bundle defined —
+                // otherwise the engine has nothing to terminate and the mode is meaningless.
+                const routingMode = cardEl.querySelector('.routingMode')?.value || 'express';
+                if (routingMode === 'fixed') {
+                    let hasAnyFpBundle = false;
+                    drops.forEach(dropEl => {
+                        dropEl.querySelectorAll(`.bundle-entry-${dropEl.id}`).forEach(bEl => {
+                            const s = parseInt(bEl.querySelector('.fpStart')?.value);
+                            const e = parseInt(bEl.querySelector('.fpEnd')?.value);
+                            if (!isNaN(s) && !isNaN(e)) hasAnyFpBundle = true;
+                        });
+                    });
+                    if (!hasAnyFpBundle) {
+                        errors.push(`${buLabel} is set to Fixed Fibre Routing but has no FP bundles defined — add at least one FP range to a drop.`);
+                    }
                 }
 
                 drops.forEach(dropEl => {
@@ -522,8 +541,15 @@
             const html = `
                 <div class="card bu-card" id="card_${buId}" data-bu-id="${buId}">
                     <div class="card-header">
-                        <h4 style="margin:0; color:#323130;">Branching Unit: ${buId}</h4>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <h4 style="margin:0;color:#323130;">Branching Unit: ${buId}</h4>
+                            <span class="fixed-routing-badge" style="display:none;font-size:0.72em;font-weight:600;background:#fff4ce;border:1px solid #f0c000;color:#7d5c00;padding:2px 8px;border-radius:10px;letter-spacing:0.03em;">FIXED ROUTING</span>
+                        </div>
                         <div class="card-controls">
+                            <select class="routingMode" title="Fibre Routing Mode" style="background-color:#f0f2f5;border:1px solid #ccc;border-radius:4px;padding:4px;margin:0;" onchange="onRoutingModeChange(this)">
+                                <option value="express">Express (pass-through)</option>
+                                <option value="fixed">Fixed Fibre Routing</option>
+                            </select>
                             <select class="switchType" style="background-color:#f0f2f5; border:1px solid #ccc; border-radius:4px; padding:4px; margin:0;">
                                 <option value="1x1">1x1 Switch (Direct Drop)</option>
                                 <option value="1x2">1x2 Switch (Optical Split)</option>
@@ -539,6 +565,13 @@
                 </div>
             `;
             document.getElementById('branchesContainer').insertAdjacentHTML('beforeend', html);
+        }
+
+        function onRoutingModeChange(selectEl) {
+            const card  = selectEl.closest('.bu-card');
+            const badge = card.querySelector('.fixed-routing-badge');
+            badge.style.display = selectEl.value === 'fixed' ? 'inline-block' : 'none';
+            refreshJsonPreview();
         }
 
         function deleteBU(buId) {
@@ -674,10 +707,11 @@
             document.querySelectorAll('.bu-card').forEach(cardEl => {
                 const buId = cardEl.dataset.buId;
                 const branchObj = {
-                    id:          buId,
-                    label:       cardEl.querySelector('.bu-label').value,
-                    switch_type: cardEl.querySelector('.switchType').value,
-                    drops:       []
+                    id:           buId,
+                    label:        cardEl.querySelector('.bu-label').value,
+                    routing_mode: cardEl.querySelector('.routingMode').value,
+                    switch_type:  cardEl.querySelector('.switchType').value,
+                    drops:        []
                 };
 
                 cardEl.querySelectorAll('.drop-card').forEach(dropEl => {
@@ -764,6 +798,11 @@
                 const buId  = `BU${buCount}`;
                 const cardEl = document.getElementById(`card_${buId}`);
                 cardEl.querySelector('.bu-label').value  = bu.label || '';
+                if (bu.routing_mode) {
+                    const rmSel = cardEl.querySelector('.routingMode');
+                    rmSel.value = bu.routing_mode;
+                    onRoutingModeChange(rmSel);
+                }
                 if (bu.switch_type) cardEl.querySelector('.switchType').value = bu.switch_type;
 
                 (bu.drops || []).forEach(drop => {
@@ -881,6 +920,72 @@
 
         // ─── INIT ─────────────────────────────────────────────────────────────────────
         updateColorSwatch();
+
+        // ─── SVG / PNG EXPORT ────────────────────────────────────────────────────────
+        function renderXmlToSvg(xml) {
+            return new Promise((resolve, reject) => {
+                const container = document.createElement('div');
+                container.style.cssText = 'position:absolute;left:-99999px;top:-99999px;width:1600px;visibility:hidden;';
+                document.body.appendChild(container);
+                const graphDiv = document.createElement('div');
+                graphDiv.className = 'mxgraph';
+                graphDiv.setAttribute('data-mxgraph', JSON.stringify({
+                    highlight: '#0050ef', nav: false, resize: false, fit: true, xml
+                }));
+                container.appendChild(graphDiv);
+                const cleanup = () => { if (document.body.contains(container)) document.body.removeChild(container); };
+                const observer = new MutationObserver(() => {
+                    const svg = container.querySelector('svg');
+                    if (svg) { observer.disconnect(); const cloned = svg.cloneNode(true); cleanup(); resolve(cloned); }
+                });
+                observer.observe(container, { childList: true, subtree: true });
+                if (window.GraphViewer) { GraphViewer.processElements(); }
+                else { cleanup(); reject(new Error('Draw.io viewer not loaded.')); return; }
+                setTimeout(() => { observer.disconnect(); cleanup(); reject(new Error('Render timed out — try again.')); }, 8000);
+            });
+        }
+        async function downloadSVG(b) {
+            const o=b.textContent; b.textContent='Rendering...'; b.disabled=true; clearError();
+            const e=validateForm(); if(e.length){showError(e[0]); b.textContent=o; b.disabled=false; return;}
+            const r=await callGenerateAPI('text');
+            if(!r.ok){if(r.error)showError(r.error); b.textContent=o; b.disabled=false; return;}
+            try {
+                const svg=await renderXmlToSvg(r.data);
+                const t=new XMLSerializer().serializeToString(svg);
+                const a=document.createElement('a');
+                a.href=URL.createObjectURL(new Blob([t],{type:'image/svg+xml'}));
+                a.download=(buildPayloadObject().system_name||'topology')+'.svg';
+                a.click(); URL.revokeObjectURL(a.href);
+            } catch(err){showError('SVG export failed: '+err.message);}
+            b.textContent=o; b.disabled=false;
+        }
+        async function downloadPNG(b) {
+            const o=b.textContent; b.textContent='Rendering...'; b.disabled=true; clearError();
+            const e=validateForm(); if(e.length){showError(e[0]); b.textContent=o; b.disabled=false; return;}
+            const r=await callGenerateAPI('text');
+            if(!r.ok){if(r.error)showError(r.error); b.textContent=o; b.disabled=false; return;}
+            try {
+                const svg=await renderXmlToSvg(r.data);
+                const svgText=new XMLSerializer().serializeToString(svg);
+                const vb=svg.getAttribute('viewBox'), pts=vb?vb.split(/[\s,]+/).map(Number):[];
+                const w=pts[2]||parseInt(svg.getAttribute('width'))||1600;
+                const h=pts[3]||parseInt(svg.getAttribute('height'))||900;
+                const S=2, cv=document.createElement('canvas');
+                cv.width=w*S; cv.height=h*S;
+                const ctx=cv.getContext('2d'); ctx.scale(S,S);
+                ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h);
+                const img=new Image(), url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svgText);
+                await new Promise((res,rej)=>{img.onload=res; img.onerror=()=>rej(new Error('Conversion failed.')); img.src=url;});
+                ctx.drawImage(img,0,0,w,h);
+                cv.toBlob(function(blob){
+                    const a=document.createElement('a');
+                    a.href=URL.createObjectURL(blob);
+                    a.download=(buildPayloadObject().system_name||'topology')+'.png';
+                    a.click(); URL.revokeObjectURL(a.href);
+                },'image/png');
+            } catch(err){showError('PNG export failed: '+err.message);}
+            b.textContent=o; b.disabled=false;
+        }
     </script>
 </body>
 </html>
