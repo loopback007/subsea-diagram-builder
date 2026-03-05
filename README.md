@@ -1,10 +1,63 @@
 # Subsea Diagram Builder
 
+![Python](https://img.shields.io/badge/Python-3.x-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)
+![Flask](https://img.shields.io/badge/Flask-App-black.svg)
+![License](https://img.shields.io/badge/License-TBD-lightgrey.svg)
+
 To build subsea cable systems diagrams for Network Engineers.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Repository Structure](#repository-structure)
+- [Quick Start (Docker Compose Prod)](#quick-start-docker-compose-prod)
+- [Portainer Deployment Checklist](#portainer-deployment-checklist)
+- [Run Without Docker](#run-without-docker)
+- [API Usage Examples](#api-usage-examples)
+- [Recent Updates](#recent-updates)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 
 ## üìñ Overview
 
-The **Subsea Diagram Builder** is a specialized tool designed to help Network Engineers visualize, construct, and manage diagrams of subsea cable systems. By providing a streamlined interface and backend processing, this project simplifies the complex task of mapping out international underwater network infrastructure.
+The **Subsea Diagram Builder** is a specialized tool designed to help Network Engineers visualize, construct, and manage diagrams of subsea cable systems. By providing a streamlined interface and backend processing, this project simplifies the complex task of mapping out international underwater network infrastructure.The repository includes Docker-first deployment options and production compose support via `docker-compose.prod.yml`.
+
+## Architecture
+
+```text
+User Browser
+    |
+    v
+Flask App (app.py)
+    |
+    v
+Topology/Diagram Engine (subsea_engine.py)
+    |
+    v
+Input Payload (topology_payload.json) + Static Assets (static/)
+```
+
+For containerized production-style runtime:
+
+```text
+Docker Host / Portainer
+    |
+    v
+docker-compose.prod.yml
+    |
+    v
+subsea-topology-api (container, port 80)
+    |
+    v
+Host port 8081
+```
+
+---
 
 ## üõ†Ô∏è Tech Stack
 
@@ -14,6 +67,19 @@ This project is built using the following technologies:
 *   **Python (37.4%)**: Backend logic, diagram generation, and data processing.
 *   **Dockerfile (3.4%)**: Containerization for consistent and easy deployment.
 *   **Shell (1.0%)**: Scripting for automation and setup tasks.
+
+## Repository Structure
+
+- `app.py` ó Flask application entry point
+- `subsea_engine.py` ó diagram generation/business logic
+- `topology_payload.json` ó sample topology payload/input
+- `static/` ó static files for UI
+- `requirements.txt` ó Python dependencies
+- `Dockerfile` ó container build recipe
+- `docker-compose.yml` ó general/local compose config
+- `docker-compose.prod.yml` ó production-style compose file
+- `nginx.conf` ó NGINX config
+- `start.sh` ó startup helper script
 
 ## üöÄ Getting Started
 
