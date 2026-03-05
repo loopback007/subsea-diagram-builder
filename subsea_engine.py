@@ -315,6 +315,40 @@ def generate_from_config(config):
         if end_x >= nodes["EAST"]["x"]:
             add_label(i, nodes["EAST"]["x"] + 10, y_off)
 
+    # --- CABLE SEGMENT LABELS ---
+    # Optional per-segment name labels drawn above the trunk span.
+    # Config: config["trunk"]["segments"] = [{"label": "Seg A–B", "length": "120 km"}, ...]
+    # One entry per gap: index 0 = WEST→BU1, 1 = BU1→BU2, …, last = BUn→EAST.
+    seg_labels = config["trunk"].get("segments", [])
+    if seg_labels:
+        # Build ordered list of trunk-node x positions (left wall of each node)
+        trunk_node_xs = [nodes["WEST"]["x"] + NODE_WIDTH]
+        for bu in config["branches"]:
+            trunk_node_xs.append(nodes[bu["id"]]["x"])
+            trunk_node_xs.append(nodes[bu["id"]]["x"] + NODE_WIDTH)
+        trunk_node_xs.append(nodes["EAST"]["x"])
+        # Pair them into spans: (right_wall_of_left_node, left_wall_of_right_node)
+        spans = [(trunk_node_xs[i], trunk_node_xs[i+1])
+                 for i in range(0, len(trunk_node_xs)-1, 2)]
+        label_y = nodes["WEST"]["y"] + 18   # above top FP line
+        for idx, seg in enumerate(seg_labels):
+            if idx >= len(spans):
+                break
+            x1, x2    = spans[idx]
+            mid_x     = (x1 + x2) / 2
+            seg_text  = seg.get("label", "")
+            seg_len   = seg.get("length", "")
+            display   = f"{seg_text}<br/><font style='font-size:8px;color:#888'>{seg_len}</font>" if seg_len else seg_text
+            lbl_style = ("text;html=1;strokeColor=none;fillColor=none;"
+                         "align=center;verticalAlign=bottom;whiteSpace=wrap;"
+                         "rounded=0;fontSize=10;fontStyle=1;")
+            lbl_w = max(80, x2 - x1 - 10)
+            cell = ET.SubElement(root, 'mxCell', id=f"seg_label_{idx}",
+                                 value=display, style=lbl_style, vertex="1", parent="1")
+            ET.SubElement(cell, 'mxGeometry',
+                          x=str(mid_x - lbl_w / 2), y=str(label_y - 30),
+                          width=str(lbl_w), height="28", **{'as': 'geometry'})
+
     # --- RENDER DROP ROUTING ---
     for bu in config["branches"]:
         switch_pos = bu.get("switch_position", "default")
@@ -675,6 +709,243 @@ def generate_from_config(config):
         add_switch_legend(lx, ly + color_box_h + gap)
 
     add_legends()
+
+    # --- FIBRE COUNT SUMMARY TABLE ---
+    def add_fibre_summary(lx, ly):
+        """
+        Table below the legends.
+        Rows: one per BU showing dropped/stub FPs and pass-through count.
+        Columns: Segment | Dropped FPs | Pass-through FPs | Notes
+        """
+        tb_meta = config.get("title_block", {})
+        if not tb_meta.get("show_fibre_summary", True):
+            return 0
+
+        COL_W   = [120, 110, 130, 140]   # Segment, Dropped, Pass-through, Notes
+        ROW_H   = 24
+        TITLE_H = 28
+        PAD     = 8
+
+        total_w = sum(COL_W)
+        headers = ["Segment", "Dropped FPs", "Pass-through FPs", "Notes"]
+
+        # Build rows — one per BU
+        rows = []
+        for bu in config["branches"]:
+            dropped = set()
+            for drop in bu["drops"]:
+                for r in get_ranges(drop):
+                    dropped.update(range(r[0], r[1] + 1))
+            for stub in bu.get("stubs", []):
+                for r in get_ranges(stub):
+                    dropped.update(range(r[0], r[1] + 1))
+            passthrough = trunk_fps - len(dropped)
+            fp_list = ", ".join(str(f) for f in sorted(dropped)) if dropped else "—"
+            rows.append([bu.get("label", bu["id"]),
+                         f"{len(dropped)} ({fp_list})" if len(dropped) <= 8 else f"{len(dropped)} FPs",
+                         str(passthrough),
+                         bu.get("notes", "")])
+
+        table_h = TITLE_H + ROW_H + len(rows) * ROW_H + PAD
+
+        # Outer box
+        box_style = ("rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;"
+                     "strokeColor=#666666;verticalAlign=top;align=left;"
+                     "spacingTop=6;spacingLeft=10;fontSize=11;fontStyle=1;")
+        box = ET.SubElement(root, 'mxCell', id="fc_table_box",
+                            value="Fibre Count Summary",
+                            style=box_style, vertex="1", parent="1")
+        ET.SubElement(box, 'mxGeometry', x=str(lx), y=str(ly),
+                      width=str(total_w), height=str(table_h),
+                      **{'as': 'geometry'})
+
+        def cell_style(bold=False, bg="#e8eaf6"):
+            return (f"text;html=1;strokeColor=#aaaaaa;fillColor={bg};"
+                    f"align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;"
+                    f"fontSize=10;{'fontStyle=1;' if bold else ''}"
+                    f"spacingLeft=4;")
+
+        # Header row
+        cx = lx
+        for ci, (hdr, cw) in enumerate(zip(headers, COL_W)):
+            cell = ET.SubElement(root, 'mxCell', id=f"fc_hdr_{ci}",
+                                 value=hdr, style=cell_style(bold=True),
+                                 vertex="1", parent="1")
+            ET.SubElement(cell, 'mxGeometry',
+                          x=str(cx), y=str(ly + TITLE_H),
+                          width=str(cw), height=str(ROW_H), **{'as': 'geometry'})
+            cx += cw
+
+        # Data rows
+        for ri, row in enumerate(rows):
+            cx = lx
+            row_y = ly + TITLE_H + ROW_H + ri * ROW_H
+            bg = "#ffffff" if ri % 2 == 0 else "#f5f5f5"
+            for ci, (val, cw) in enumerate(zip(row, COL_W)):
+                cell = ET.SubElement(root, 'mxCell', id=f"fc_row_{ri}_{ci}",
+                                     value=str(val), style=cell_style(bold=False, bg=bg),
+                                     vertex="1", parent="1")
+                ET.SubElement(cell, 'mxGeometry',
+                              x=str(cx), y=str(row_y),
+                              width=str(cw), height=str(ROW_H), **{'as': 'geometry'})
+                cx += cw
+
+        return table_h
+
+    # --- TITLE BLOCK (bottom-left, below fibre summary) ---
+    def add_title_block(bx=None, by=None, BLOCK_W=500, BLOCK_H=160):
+        tb = config.get("title_block", {})
+        if not tb.get("enabled", False):
+            return
+        # Bottom-right: to the right of the EAST node, aligned with trunk top
+        if bx is None:
+            bx = nodes["EAST"]["x"] + NODE_WIDTH + 40
+        if by is None:
+            by = nodes["WEST"]["y"]
+
+        # Outer border
+        border_style = ("rounded=0;whiteSpace=wrap;html=1;"
+                        "fillColor=#ffffff;strokeColor=#333333;strokeWidth=2;"
+                        "verticalAlign=top;align=left;")
+        box = ET.SubElement(root, 'mxCell', id="title_block_box",
+                            value="", style=border_style,
+                            vertex="1", parent="1")
+        ET.SubElement(box, 'mxGeometry', x=str(bx), y=str(by),
+                      width=str(BLOCK_W), height=str(BLOCK_H),
+                      **{'as': 'geometry'})
+
+        def tb_cell(cid, val, x, y, w, h, bold=False, size=10, bg="#ffffff", align="left"):
+            style = (f"text;html=1;strokeColor=#cccccc;fillColor={bg};"
+                     f"align={align};verticalAlign=middle;whiteSpace=wrap;rounded=0;"
+                     f"fontSize={size};{'fontStyle=1;' if bold else ''}spacingLeft=4;")
+            cell = ET.SubElement(root, 'mxCell', id=cid, value=val,
+                                 style=style, vertex="1", parent="1")
+            ET.SubElement(cell, 'mxGeometry', x=str(x), y=str(y),
+                          width=str(w), height=str(h), **{'as': 'geometry'})
+
+        ROW = 26
+        # Title row — system name
+        tb_cell("tb_sys",    tb.get("system_name", config.get("system_name", "")),
+                bx, by, BLOCK_W - 100, ROW + 4, bold=True, size=13, bg="#dce3f0", align="center")
+        # Logo placeholder (right of title)
+        logo_style = ("rounded=0;whiteSpace=wrap;html=1;"
+                      "fillColor=#f5f5f5;strokeColor=#cccccc;"
+                      "align=center;verticalAlign=middle;fontSize=9;fontColor=#aaaaaa;")
+        logo_cell = ET.SubElement(root, 'mxCell', id="tb_logo",
+                                  value=tb.get("logo_text", "LOGO"),
+                                  style=logo_style, vertex="1", parent="1")
+        ET.SubElement(logo_cell, 'mxGeometry',
+                      x=str(bx + BLOCK_W - 100), y=str(by),
+                      width="100", height=str(ROW + 4), **{'as': 'geometry'})
+
+        # Field rows
+        fields = [
+            ("Revision",         tb.get("revision", "")),
+            ("Date",             tb.get("date", "")),
+            ("Designer",         tb.get("designer", "")),
+            ("Total Throughput", tb.get("total_throughput", "")),
+        ]
+        LABEL_W = 120
+        for fi, (label, val) in enumerate(fields):
+            row_y = by + ROW + 4 + fi * ROW
+            tb_cell(f"tb_lbl_{fi}", label,
+                    bx, row_y, LABEL_W, ROW, bold=True, bg="#f0f0f0")
+            tb_cell(f"tb_val_{fi}", val,
+                    bx + LABEL_W, row_y, BLOCK_W - LABEL_W, ROW)
+
+    # --- FIBRE SUMMARY PLACEMENT ---
+    # Place it below the switch legend (reuse measured ly + legend heights)
+    COLOR_LEGEND_HEIGHT = 30
+    COLOR_ROW_H         = 28
+    H_PAD               = 12
+    lx_base = int(nodes["WEST"]["x"])
+    ly_base = int(nodes["WEST"]["y"] + TRUNK_NODE_HEIGHT + 60)
+    colors_config = config["trunk"].get("colors", [])
+    if colors_config:
+        covered = set()
+        for rule in colors_config:
+            covered.update(range(max(1, rule["fp_range"][0]),
+                                 min(trunk_fps, rule["fp_range"][1]) + 1))
+        default_count = 1 if any(i not in covered for i in range(1, trunk_fps + 1)) else 0
+        n_entries = default_count + len(set(r["color"] for r in colors_config))
+        color_box_h = COLOR_LEGEND_HEIGHT + n_entries * COLOR_ROW_H + H_PAD
+    else:
+        color_box_h = 0
+    SW_LEGEND_H = 250   # fixed height of the switch positions box
+    gap_after_legend = 20
+    summary_y = ly_base + color_box_h + (20 if color_box_h else 0) + SW_LEGEND_H + gap_after_legend
+    fc_table_h = add_fibre_summary(lx_base, summary_y)
+
+    # --- DIAGRAM BORDER + TITLE BLOCK (ordered to solve chicken-and-egg) ---
+    # Step 1: measure bounding box of all content placed so far (no title block yet)
+    BORDER_PAD    = 40
+    BORDER_CORNER = 20
+    TB_W, TB_H    = 500, 160
+
+    def content_bbox():
+        all_x, all_y, all_x2, all_y2 = [], [], [], []
+        for cell in root.iter('mxCell'):
+            geo = cell.find('mxGeometry')
+            if geo is None:
+                continue
+            if cell.get('vertex') == '1':
+                try:
+                    ex = float(geo.get('x', 0)); ey = float(geo.get('y', 0))
+                    ew = float(geo.get('width', 0)); eh = float(geo.get('height', 0))
+                    all_x.append(ex); all_y.append(ey)
+                    all_x2.append(ex + ew); all_y2.append(ey + eh)
+                except (TypeError, ValueError):
+                    pass
+            elif cell.get('edge') == '1':
+                for pt in geo.findall('mxPoint'):
+                    try:
+                        px = float(pt.get('x', 0)); py = float(pt.get('y', 0))
+                        all_x.append(px); all_y.append(py)
+                        all_x2.append(px); all_y2.append(py)
+                    except (TypeError, ValueError):
+                        pass
+        if not all_x:
+            return 0, 0, 100, 100
+        return min(all_x), min(all_y), max(all_x2), max(all_y2)
+
+    cx1, cy1, cx2, cy2 = content_bbox()
+
+    # Step 2: place title block anchored to bottom-right corner of the future border
+    bdr_x  = cx1 - BORDER_PAD
+    bdr_y  = cy1 - BORDER_PAD
+    bdr_x2 = cx2 + BORDER_PAD
+    bdr_y2 = cy2 + BORDER_PAD
+
+    tb = config.get("title_block", {})
+    if tb.get("enabled", False):
+        # Anchor: right edge of border, bottom edge of border
+        tb_x = bdr_x2 - TB_W
+        tb_y = bdr_y2 - TB_H
+        add_title_block(bx=tb_x, by=tb_y, BLOCK_W=TB_W, BLOCK_H=TB_H)
+        # Expand border to include title block (it sits inside the border footprint
+        # since we anchored to its inner-right/bottom)
+
+    # Step 3: re-measure after title block is added, then draw border
+    cx1, cy1, cx2, cy2 = content_bbox()
+    bdr_x  = cx1 - BORDER_PAD
+    bdr_y  = cy1 - BORDER_PAD
+    bdr_x2 = cx2 + BORDER_PAD
+    bdr_y2 = cy2 + BORDER_PAD
+    bdr_w  = bdr_x2 - bdr_x
+    bdr_h  = bdr_y2 - bdr_y
+
+    bdr_style = (
+        f"rounded=1;arcSize={max(1, int(100 * BORDER_CORNER / min(bdr_w, bdr_h)))};"
+        "whiteSpace=wrap;html=1;fillColor=none;"
+        "strokeColor=#333333;strokeWidth=3;dashed=0;"
+        "verticalAlign=top;align=left;pointerEvents=0;"
+    )
+    bdr_cell = ET.SubElement(root, 'mxCell', id="diagram_border",
+                             value="", style=bdr_style, vertex="1", parent="1")
+    ET.SubElement(bdr_cell, 'mxGeometry',
+                  x=str(round(bdr_x, 1)), y=str(round(bdr_y, 1)),
+                  width=str(round(bdr_w, 1)), height=str(round(bdr_h, 1)),
+                  **{'as': 'geometry'})
 
     # --- SERIALIZE ---
     ET.indent(tree := ET.ElementTree(mxfile), space="\t", level=0)

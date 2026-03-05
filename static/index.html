@@ -9,6 +9,14 @@
         .drop-card { border-left: 4px solid #0050ef; margin-left: 20px; background: #fafafa; }
         .sub-branch-card { border-left: 4px solid #107c10; margin-left: 20px; background: #fff; margin-top: 10px; }
         .stub-card { border-left: 4px solid #d79b00; margin-left: 20px; background: #fffde7; margin-top: 10px; }
+        .title-block-card { border: 1px solid #ccc; border-radius: 6px; background: #fff; padding: 15px; margin-top: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .title-block-card h3 { margin: 0 0 12px; font-size: 1em; color: #323130; }
+        .tb-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+        .tb-row label { font-size: 0.88em; color: #323130; min-width: 120px; }
+        .tb-row input[type="text"] { flex: 1; min-width: 160px; margin: 0; }
+        .seg-row { display: flex; align-items: center; gap: 8px; margin: 6px 5px 0; flex-wrap: wrap; }
+        .seg-row label { font-size: 0.82em; color: #605e5c; white-space: nowrap; }
+        .seg-row input { margin: 0; padding: 5px 8px; font-size: 0.88em; }
         .fp-bundle { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
         input[type="text"], input[type="number"], select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         input.field-error { border-color: #d13438 !important; background-color: #fff4f4; }
@@ -61,6 +69,10 @@
         #diagramPreviewPlaceholder { padding: 48px 20px; text-align: center; color: #a19f9d; font-size: 0.9em; }
         #diagramRenderTarget { padding: 10px; overflow: auto; }
         #diagramRenderTarget .mxgraph { max-width: 100% !important; }
+        .tb-card { border-left: 4px solid #333; background: #fafafa; }
+        .seg-label-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+        .seg-label-row label { font-size: 0.82em; color: #605e5c; min-width: 80px; }
+        .seg-label-row input { margin: 0; padding: 5px 7px; flex: 1; }
     </style>
     <script src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>
 </head>
@@ -120,6 +132,42 @@
         <div id="colorSwatch"></div>
         <div id="colorSwatchLabel"></div>
     </div>
+</div>
+
+<div class="title-block-card">
+    <h3>Title Block &amp; Diagram Metadata</h3>
+    <div class="tb-row">
+        <label><input type="checkbox" id="tbEnabled" onchange="refreshJsonPreview()"> Include title block in diagram</label>
+        <label><input type="checkbox" id="tbShowSummary" checked onchange="refreshJsonPreview()"> Include fibre count summary table</label>
+    </div>
+    <div id="tbFields" style="margin-top:10px;">
+        <div class="tb-row">
+            <label for="tbRevision">Revision:</label>
+            <input type="text" id="tbRevision" placeholder="e.g. Rev A" oninput="refreshJsonPreview()">
+            <label for="tbDate">Date:</label>
+            <input type="text" id="tbDate" placeholder="e.g. 2026-03-05" oninput="refreshJsonPreview()">
+        </div>
+        <div class="tb-row">
+            <label for="tbDesigner">Designer (optional):</label>
+            <input type="text" id="tbDesigner" placeholder="Name" oninput="refreshJsonPreview()">
+            <label for="tbThroughput">Total Throughput (optional):</label>
+            <input type="text" id="tbThroughput" placeholder="e.g. 100G" oninput="refreshJsonPreview()">
+        </div>
+        <div class="tb-row">
+            <label for="tbLogo">Logo placeholder text (optional):</label>
+            <input type="text" id="tbLogo" placeholder="LOGO" oninput="refreshJsonPreview()">
+        </div>
+    </div>
+</div>
+
+<!-- CABLE SEGMENT LABELS CARD -->
+<div class="card" style="margin-top:15px;">
+    <div class="card-header">
+        <h3 style="margin:0;">Cable Segment Labels</h3>
+        <span style="font-size:0.8em;color:#605e5c;">One per span — span 0 = West→BU1, 1 = BU1→BU2, last = BUn→East</span>
+    </div>
+    <div id="segLabelsContainer"></div>
+    <button class="btn-add" style="margin-top:8px;" onclick="addSegLabel()">+ Add Segment</button>
 </div>
 
 <div id="branchesContainer"></div>
@@ -427,12 +475,18 @@
                             <option value="pos1">Sw. Pos. 1 — Trunk Through</option>
                             <option value="pos2">Sw. Pos. 2 — Trunk to Branch</option>
                         </select>
-                        <button class="btn-reorder" title="Move up"   onclick="moveBU('${buId}','up')">▲</button>
-                        <button class="btn-reorder" title="Move down" onclick="moveBU('${buId}','down')">▼</button>
-                        <button class="btn-delete"  title="Delete BU" onclick="deleteBU('${buId}')">×</button>
+                        <button class="btn-reorder" title="Duplicate" onclick="duplicateBU('${buId}')">⧉</button>
+                        <button class="btn-reorder" title="Move up"      onclick="moveBU('${buId}','up')">▲</button>
+                        <button class="btn-reorder" title="Move down"    onclick="moveBU('${buId}','down')">▼</button>
+                        <button class="btn-delete"  title="Delete BU"    onclick="deleteBU('${buId}')">×</button>
                     </div>
                 </div>
                 <input type="text" class="bu-label" placeholder="BU Label" value="BU ${buCount}">
+                <div class="seg-row">
+                    <label>↳ Cable segment into this BU:</label>
+                    <input type="text" class="bu-seg-label"  placeholder="Segment name (e.g. Seg A–B)" style="width:190px;">
+                    <input type="text" class="bu-seg-length" placeholder="Length (e.g. 120 km)" style="width:130px;">
+                </div>
                 <div id="drops_${buId}"></div>
                 <div id="stubs_${buId}"></div>
                 <button class="btn-add" onclick="addDrop('${buId}')">+ Add Branch Drop</button>
@@ -446,6 +500,66 @@
         refreshJsonPreview();
     }
     function deleteBU(buId) { document.getElementById(`card_${buId}`)?.remove(); refreshJsonPreview(); }
+    function duplicateBU(srcBuId) {
+        // Snapshot config of the source BU via the payload builder
+        const payload = buildPayloadObject();
+        const srcBranch = payload.branches.find(b => b.id === srcBuId);
+        if (!srcBranch) return;
+        // Deep-clone and rewrite all target IDs with _copy suffix
+        const clone = JSON.parse(JSON.stringify(srcBranch));
+        function suffixIds(obj) {
+            if (obj.target_id) obj.target_id = obj.target_id + '_copy';
+            (obj.drops || []).forEach(d => { suffixIds(d); (d.sub_branches || []).forEach(suffixIds); });
+            (obj.stubs || []).forEach(suffixIds);
+        }
+        suffixIds(clone);
+        // Insert the new BU into the branches array right after the source
+        const idx = payload.branches.findIndex(b => b.id === srcBuId);
+        payload.branches.splice(idx + 1, 0, clone);
+        // Rebuild just the branches section (preserve all trunk / title block fields)
+        const branchContainer = document.getElementById('branchesContainer');
+        branchContainer.innerHTML = '';
+        buCount = 0;
+        const saved = { globalDropCount, globalBundleCount, globalSubCount };
+        globalDropCount = globalBundleCount = globalSubCount = 0;
+        payload.branches.forEach(bu => {
+            addBranchingUnit();
+            const newBuId  = `BU${buCount}`;
+            const cardEl   = document.getElementById(`card_${newBuId}`);
+            cardEl.querySelector('.bu-label').value      = bu.label      || '';
+            cardEl.querySelector('.bu-seg-label').value  = bu.seg_label  || '';
+            cardEl.querySelector('.bu-seg-length').value = bu.seg_length || '';
+            cardEl.querySelector('.bu-seg-label').value  = bu.seg_label  || '';
+            cardEl.querySelector('.bu-seg-length').value = bu.seg_length || '';
+            if (bu.routing_mode)    { const s=cardEl.querySelector('.routingMode');    s.value=bu.routing_mode;    onRoutingModeChange(s); }
+            if (bu.switch_type)       cardEl.querySelector('.switchType').value      = bu.switch_type;
+            if (bu.switch_position) { const s=cardEl.querySelector('.switchPosition'); s.value=bu.switch_position; onSwitchPositionChange(s); }
+            (bu.drops||[]).forEach(drop => {
+                addDrop(newBuId);
+                const dropId = `drop_${globalDropCount}`;
+                const dropEl = document.getElementById(dropId);
+                dropEl.querySelector('.targetId').value    = drop.target_id||'';
+                dropEl.querySelector('.targetLabel').value = drop.label||'';
+                document.getElementById(`bundles_${dropId}`).innerHTML='';
+                (drop.fp_ranges||[]).forEach(r => { addFpBundle(dropId); const ns=dropEl.querySelectorAll(`.bundle-entry-${dropId}`); const b=ns[ns.length-1]; b.querySelector('.fpStart').value=r[0]; b.querySelector('.fpEnd').value=r[1]; });
+                (drop.sub_branches||[]).forEach(sub => {
+                    addSubBranch(dropId);
+                    const subId=`sub_${globalSubCount}`; const subEl=document.getElementById(subId);
+                    subEl.querySelector('.subTargetId').value=sub.target_id||''; subEl.querySelector('.subLabel').value=sub.label||''; subEl.querySelector('.subDirection').value=sub.direction||'down';
+                    document.getElementById(`subbundles_${subId}`).innerHTML='';
+                    (sub.fp_ranges||[]).forEach(r => { addSubFpBundle(subId); const ns=subEl.querySelectorAll(`.sub-bundle-entry-${subId}`); const b=ns[ns.length-1]; b.querySelector('.subFpStart').value=r[0]; b.querySelector('.subFpEnd').value=r[1]; });
+                });
+            });
+            (bu.stubs||[]).forEach(stub => {
+                addStub(newBuId);
+                const stubId=`stub_${globalDropCount}`; const stubEl=document.getElementById(stubId);
+                stubEl.querySelector('.stubTargetId').value=stub.target_id||''; stubEl.querySelector('.stubLabel').value=stub.label||''; stubEl.querySelector('.stubSwitchPos').value=stub.switch_position||'default';
+                document.getElementById(`stubBundles_${stubId}`).innerHTML='';
+                (stub.fp_ranges||[]).forEach(r => { addStubBundle(stubId); const ns=stubEl.querySelectorAll(`.stub-bundle-entry-${stubId}`); const b=ns[ns.length-1]; b.querySelector('.stubFpStart').value=r[0]; b.querySelector('.stubFpEnd').value=r[1]; });
+            });
+        });
+        refreshJsonPreview();
+    }
     function moveBU(buId, direction) {
         const card = document.getElementById(`card_${buId}`);
         const container = document.getElementById('branchesContainer');
@@ -575,7 +689,8 @@
                 lane_width: parseInt(document.getElementById('laneWidth').value)   || 250,
                 drop_depth: parseInt(document.getElementById('dropDepth').value)   || 150,
                 line_gap:   parseInt(document.getElementById('lineGap').value)     || 6,
-                colors: []
+                colors: [],
+                segments: []
             },
             branches: []
         };
@@ -587,9 +702,18 @@
         });
         document.querySelectorAll('.bu-card').forEach(cardEl => {
             const buId = cardEl.dataset.buId;
+            const buSegLabel  = cardEl.querySelector('.bu-seg-label')?.value  || '';
+            const buSegLength = cardEl.querySelector('.bu-seg-length')?.value || '';
+            if (buSegLabel || buSegLength) {
+                payload.trunk.segments.push({ label: buSegLabel, length: buSegLength });
+            } else {
+                payload.trunk.segments.push(null);
+            }
             const branchObj = {
                 id: buId,
                 label: cardEl.querySelector('.bu-label').value,
+                seg_label:  buSegLabel,
+                seg_length: buSegLength,
                 routing_mode:    cardEl.querySelector('.routingMode').value,
                 switch_type:     cardEl.querySelector('.switchType').value,
                 switch_position: cardEl.querySelector('.switchPosition').value,
@@ -638,6 +762,22 @@
             });
             payload.branches.push(branchObj);
         });
+        payload.trunk.segments = [];
+        document.querySelectorAll('#segLabelsContainer .seg-label-row').forEach(row => {
+            const lbl = row.querySelector('.segLabelText')?.value.trim() || '';
+            const len = row.querySelector('.segLengthText')?.value.trim() || '';
+            payload.trunk.segments.push({ label: lbl, length: len });
+        });
+        // Title block
+        payload.title_block = {
+            enabled:          document.getElementById('tbEnabled').checked,
+            show_fibre_summary: document.getElementById('tbShowSummary').checked,
+            revision:         document.getElementById('tbRevision').value,
+            date:             document.getElementById('tbDate').value,
+            designer:         document.getElementById('tbDesigner').value,
+            total_throughput: document.getElementById('tbThroughput').value,
+            logo_text:        document.getElementById('tbLogo').value,
+        };
         return payload;
     }
 
@@ -748,6 +888,19 @@
                 });
             });
         });
+        // Restore segment labels
+        document.getElementById('segLabelsContainer').innerHTML = '';
+        segLabelCount = 0;
+        (config.trunk?.segments || []).forEach(s => addSegLabel(s.label || '', s.length || ''));
+        // Restore title block
+        const tb = config.title_block || {};
+        document.getElementById('tbEnabled').checked       = !!tb.enabled;
+        document.getElementById('tbShowSummary').checked   = tb.show_fibre_summary !== false;
+        document.getElementById('tbRevision').value        = tb.revision || '';
+        document.getElementById('tbDate').value            = tb.date || '';
+        document.getElementById('tbDesigner').value        = tb.designer || '';
+        document.getElementById('tbThroughput').value      = tb.total_throughput || '';
+        document.getElementById('tbLogo').value            = tb.logo_text || '';
         updateColorSwatch(); refreshJsonPreview();
     }
 
@@ -781,6 +934,92 @@
             previewHasContent = true;
         } else { if (result.error) showError(result.error); }
         btnElement.textContent = orig; btnElement.disabled = false;
+    }
+
+    // ─── SEGMENT LABELS ─────────────────────────────────────────────────────────
+    let segLabelCount = 0;
+    function addSegLabel(label='', length='') {
+        segLabelCount++;
+        const sid = `seg_${segLabelCount}`;
+        document.getElementById('segLabelsContainer').insertAdjacentHTML('beforeend', `
+            <div class="seg-label-row" id="${sid}">
+                <label>Label:</label>
+                <input type="text" class="segLabelText" placeholder="e.g. Segment A–B" value="${label}">
+                <label style="min-width:60px;">Length:</label>
+                <input type="text" class="segLengthText" placeholder="e.g. 120 km" style="max-width:110px;" value="${length}">
+                <button class="btn-delete" onclick="document.getElementById('${sid}').remove(); refreshJsonPreview();">x</button>
+            </div>`);
+    }
+
+    // ─── BU DUPLICATION ──────────────────────────────────────────────────────────
+    function duplicateBU(buId) {
+        const payload = buildPayloadObject();
+        const buData  = payload.branches.find(b => b.id === buId);
+        if (!buData) return;
+        const cloned  = JSON.parse(JSON.stringify(buData));
+        function suffixId(s) { return (s || '') + '_copy'; }
+        (cloned.drops || []).forEach(d => {
+            d.target_id = suffixId(d.target_id);
+            (d.sub_branches || []).forEach(s => { s.target_id = suffixId(s.target_id); });
+        });
+        (cloned.stubs || []).forEach(s => { s.target_id = suffixId(s.target_id); });
+        cloned.label = (cloned.label || '') + ' (copy)';
+        addBranchingUnit();
+        const newBuId = `BU${buCount}`;
+        const card    = document.getElementById(`card_${newBuId}`);
+        card.querySelector('.bu-label').value = cloned.label;
+        const rmSel = card.querySelector('.routingMode');
+        rmSel.value = cloned.routing_mode || 'express'; onRoutingModeChange(rmSel);
+        card.querySelector('.switchType').value = cloned.switch_type || '1x1';
+        const spSel = card.querySelector('.switchPosition');
+        spSel.value = cloned.switch_position || 'default'; onSwitchPositionChange(spSel);
+        document.getElementById(`drops_${newBuId}`).innerHTML = '';
+        (cloned.drops || []).forEach(drop => {
+            addDrop(newBuId);
+            const dropId = `drop_${globalDropCount}`;
+            const dropEl = document.getElementById(dropId);
+            dropEl.querySelector('.targetId').value    = drop.target_id || '';
+            dropEl.querySelector('.targetLabel').value = drop.label || '';
+            document.getElementById(`bundles_${dropId}`).innerHTML = '';
+            (drop.fp_ranges || []).forEach(r => {
+                addFpBundle(dropId);
+                const bNodes = dropEl.querySelectorAll(`.bundle-entry-${dropId}`);
+                const bEl = bNodes[bNodes.length - 1];
+                bEl.querySelector('.fpStart').value = r[0]; bEl.querySelector('.fpEnd').value = r[1];
+            });
+            (drop.sub_branches || []).forEach(sub => {
+                addSubBranch(dropId);
+                const subId = `sub_${globalSubCount}`;
+                const subEl = document.getElementById(subId);
+                subEl.querySelector('.subTargetId').value  = sub.target_id || '';
+                subEl.querySelector('.subLabel').value     = sub.label || '';
+                subEl.querySelector('.subDirection').value = sub.direction || 'down';
+                document.getElementById(`subbundles_${subId}`).innerHTML = '';
+                (sub.fp_ranges || []).forEach(r => {
+                    addSubFpBundle(subId);
+                    const sn = subEl.querySelectorAll(`.sub-bundle-entry-${subId}`);
+                    const bEl = sn[sn.length - 1];
+                    bEl.querySelector('.subFpStart').value = r[0]; bEl.querySelector('.subFpEnd').value = r[1];
+                });
+            });
+        });
+        document.getElementById(`stubs_${newBuId}`).innerHTML = '';
+        (cloned.stubs || []).forEach(stub => {
+            addStub(newBuId);
+            const stubId = `stub_${globalDropCount}`;
+            const stubEl = document.getElementById(stubId);
+            stubEl.querySelector('.stubTargetId').value  = stub.target_id || '';
+            stubEl.querySelector('.stubLabel').value     = stub.label || '';
+            stubEl.querySelector('.stubSwitchPos').value = stub.switch_position || 'default';
+            document.getElementById(`stubBundles_${stubId}`).innerHTML = '';
+            (stub.fp_ranges || []).forEach(r => {
+                addStubBundle(stubId);
+                const sn = stubEl.querySelectorAll(`.stub-bundle-entry-${stubId}`);
+                const bEl = sn[sn.length - 1];
+                bEl.querySelector('.stubFpStart').value = r[0]; bEl.querySelector('.stubFpEnd').value = r[1];
+            });
+        });
+        refreshJsonPreview();
     }
 
     // ─── INIT ────────────────────────────────────────────────────────────────────
