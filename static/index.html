@@ -8,6 +8,7 @@
         .card { border: 1px solid #ccc; padding: 15px; margin-top: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .drop-card { border-left: 4px solid #0050ef; margin-left: 20px; background: #fafafa; }
         .sub-branch-card { border-left: 4px solid #107c10; margin-left: 20px; background: #fff; margin-top: 10px; }
+        .stub-card { border-left: 4px solid #d79b00; margin-left: 20px; background: #fffde7; margin-top: 10px; }
         .fp-bundle { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
         input[type="text"], input[type="number"], select { margin: 5px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         input.field-error { border-color: #d13438 !important; background-color: #fff4f4; }
@@ -71,8 +72,8 @@
     <h3>System & Trunk Configuration</h3>
     <input type="text" id="sysName" placeholder="System Name" value="Project_Alpha">
     <input type="number" id="totalFPs" placeholder="Total Trunk FPs" value="24" style="width: 120px;" oninput="updateColorSwatch()">
-    <input type="text" id="westNode" placeholder="West Node Label" value="CLS 1 (West Trunk)">
-    <input type="text" id="eastNode" placeholder="East Node Label" value="CLS 3 (East Trunk)">
+    <input type="text" id="westNode" placeholder="West Node Label" value="CLS 1\n(West Trunk)">
+    <input type="text" id="eastNode" placeholder="East Node Label" value="CLS 3\n(East Trunk)">
 
     <!-- Spacing controls -->
     <div class="spacing-control">
@@ -271,7 +272,7 @@
         document.querySelectorAll('.bu-card').forEach((cardEl, buIdx) => {
             const buLabel = `BU ${buIdx + 1}`;
             const drops = cardEl.querySelectorAll('.drop-card');
-            if (drops.length === 0) errors.push(`${buLabel} has no drops.`);
+
             const routingMode = cardEl.querySelector('.routingMode')?.value || 'express';
             if (routingMode === 'fixed') {
                 let hasAnyFp = false;
@@ -314,6 +315,27 @@
                             if(!isNaN(fpCount)&&e>fpCount){endEl.classList.add('field-error');errors.push(`Sub-branch "${subTid}": FP ${e} exceeds trunk size.`);}
                         }
                     });
+                });
+            });
+            // Validate stubs
+            const buId = cardEl.dataset.buId;
+            cardEl.querySelectorAll(`#stubs_${buId} .stub-card`).forEach(stubEl => {
+                const tidEl = stubEl.querySelector('.stubTargetId');
+                const tid   = tidEl ? tidEl.value.trim() : '';
+                if (!tid) { if (tidEl) tidEl.classList.add('field-error'); errors.push(`${buLabel}: a stub is missing a Target ID.`); }
+                else if (seenIds.has(tid)) { if (tidEl) tidEl.classList.add('field-error'); errors.push(`Duplicate Target ID "${tid}".`); }
+                else seenIds.add(tid);
+                const bundles = stubEl.querySelectorAll(`.stub-bundle-entry-${stubEl.id}`);
+                if (bundles.length === 0) errors.push(`Stub "${tid||'?'}": no FP bundles defined.`);
+                bundles.forEach(bEl => {
+                    const sEl=bEl.querySelector('.stubFpStart'), eEl=bEl.querySelector('.stubFpEnd');
+                    const s=parseInt(sEl?.value), e=parseInt(eEl?.value);
+                    if (isNaN(s)||isNaN(e)) { if(sEl)sEl.classList.add('field-error'); if(eEl)eEl.classList.add('field-error'); errors.push(`Stub "${tid||'?'}": FP bundle missing values.`); }
+                    else {
+                        if(s<1){sEl.classList.add('field-error');errors.push(`Stub "${tid}": FP start must be ≥ 1.`);}
+                        if(s>e){sEl.classList.add('field-error');eEl.classList.add('field-error');errors.push(`Stub "${tid}": FP range [${s}–${e}] inverted.`);}
+                        if(!isNaN(fpCount)&&e>fpCount){eEl.classList.add('field-error');errors.push(`Stub "${tid}": FP ${e} exceeds trunk size.`);}
+                    }
                 });
             });
         });
@@ -412,7 +434,9 @@
                 </div>
                 <input type="text" class="bu-label" placeholder="BU Label" value="BU ${buCount}">
                 <div id="drops_${buId}"></div>
+                <div id="stubs_${buId}"></div>
                 <button class="btn-add" onclick="addDrop('${buId}')">+ Add Branch Drop</button>
+                <button class="btn-add" onclick="addStub('${buId}')" style="margin-left:6px;">+ Add Stub</button>
             </div>`;
         document.getElementById('branchesContainer').insertAdjacentHTML('beforeend', html);
     }
@@ -470,6 +494,41 @@
                 <input type="number" class="fpStart" placeholder="Start" style="width:75px;">
                 <span>–</span>
                 <input type="number" class="fpEnd" placeholder="End" style="width:75px;">
+                <button class="btn-delete" onclick="this.parentElement.remove(); refreshJsonPreview();">×</button>
+            </div>`);
+    }
+    function addStub(buId) {
+        globalDropCount++;
+        const stubId = `stub_${globalDropCount}`;
+        document.getElementById(`stubs_${buId}`).insertAdjacentHTML('beforeend', `
+            <div class="card stub-card" id="${stubId}">
+                <div class="card-header">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <h5 style="margin:0;">Stub</h5>
+                        <span style="font-size:0.75em;background:#fff0b3;border:1px solid #d79b00;color:#7d5c00;padding:2px 7px;border-radius:10px;">STUB</span>
+                    </div>
+                    <button class="btn-delete" onclick="document.getElementById('${stubId}').remove(); refreshJsonPreview();">×</button>
+                </div>
+                <input type="text" class="stubTargetId"  placeholder="Target ID (e.g. STUB_A)" value="STUB_A">
+                <input type="text" class="stubLabel"     placeholder="Stub Label" value="Stub Branch">
+                <select class="stubSwitchPos" title="Switch Position" style="display:block;margin:6px 5px 4px;padding:6px;border:1px solid #ccc;border-radius:4px;">
+                    <option value="default">Default (dot)</option>
+                    <option value="pos1">Sw. Pos. 1 — Trunk Through</option>
+                    <option value="pos2">Sw. Pos. 2 — Trunk to Branch</option>
+                </select>
+                <div id="stubBundles_${stubId}" style="margin:8px 0;"></div>
+                <button class="btn-add" onclick="addStubBundle('${stubId}')">+ Add FP Bundle</button>
+            </div>`);
+        addStubBundle(stubId);
+    }
+    function addStubBundle(stubId) {
+        globalBundleCount++;
+        document.getElementById(`stubBundles_${stubId}`).insertAdjacentHTML('beforeend', `
+            <div class="fp-bundle stub-bundle-entry-${stubId}">
+                <span style="font-size:0.85em;color:#605e5c;">FP Range:</span>
+                <input type="number" class="stubFpStart" placeholder="Start" style="width:75px;">
+                <span>–</span>
+                <input type="number" class="stubFpEnd" placeholder="End" style="width:75px;">
                 <button class="btn-delete" onclick="this.parentElement.remove(); refreshJsonPreview();">×</button>
             </div>`);
     }
@@ -560,6 +619,22 @@
                     });
                 });
                 branchObj.drops.push(dropData);
+            });
+            // Collect stubs
+            branchObj.stubs = [];
+            cardEl.querySelectorAll(`#stubs_${buId} .stub-card`).forEach(stubEl => {
+                const stubRanges = [];
+                stubEl.querySelectorAll(`.stub-bundle-entry-${stubEl.id}`).forEach(bEl => {
+                    const s = parseInt(bEl.querySelector('.stubFpStart').value);
+                    const e = parseInt(bEl.querySelector('.stubFpEnd').value);
+                    if (!isNaN(s) && !isNaN(e)) stubRanges.push([s, e]);
+                });
+                branchObj.stubs.push({
+                    target_id:       stubEl.querySelector('.stubTargetId').value,
+                    label:           stubEl.querySelector('.stubLabel').value,
+                    switch_position: stubEl.querySelector('.stubSwitchPos').value,
+                    fp_ranges:       stubRanges,
+                });
             });
             payload.branches.push(branchObj);
         });
@@ -653,6 +728,23 @@
                         const bEl   = nodes[nodes.length - 1];
                         bEl.querySelector('.subFpStart').value = r[0]; bEl.querySelector('.subFpEnd').value = r[1];
                     });
+                });
+            });
+            // Restore stubs
+            (bu.stubs || []).forEach(stub => {
+                addStub(buId);
+                const stubId = `stub_${globalDropCount}`;
+                const stubEl = document.getElementById(stubId);
+                stubEl.querySelector('.stubTargetId').value  = stub.target_id || '';
+                stubEl.querySelector('.stubLabel').value     = stub.label || '';
+                stubEl.querySelector('.stubSwitchPos').value = stub.switch_position || 'default';
+                document.getElementById(`stubBundles_${stubId}`).innerHTML = '';
+                (stub.fp_ranges || []).forEach(r => {
+                    addStubBundle(stubId);
+                    const nodes = stubEl.querySelectorAll(`.stub-bundle-entry-${stubId}`);
+                    const bEl   = nodes[nodes.length - 1];
+                    bEl.querySelector('.stubFpStart').value = r[0];
+                    bEl.querySelector('.stubFpEnd').value   = r[1];
                 });
             });
         });

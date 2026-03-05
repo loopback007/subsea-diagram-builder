@@ -59,6 +59,25 @@ def generate_from_config(config):
                         raise ValueError(f"Sub-branch '{sub_tid}' under '{tid}': FP range [{start}, {end}] is inverted.")
                     if end > trunk_fps:
                         raise ValueError(f"Sub-branch '{sub_tid}' under '{tid}' references FP {end}, but trunk only has {trunk_fps} FPs.")
+        # Validate stubs
+        for stub in bu.get("stubs", []):
+            stid = stub.get("target_id", "")
+            if not stid:
+                raise ValueError(f"A stub in BU '{bu['id']}' is missing a target_id.")
+            if stid in seen_target_ids:
+                raise ValueError(f"Duplicate target_id '{stid}' in stub of BU '{bu['id']}'.")
+            seen_target_ids.add(stid)
+            stub_ranges = get_ranges(stub)
+            if not stub_ranges:
+                raise ValueError(f"Stub '{stid}' in BU '{bu['id']}' has no FP ranges defined.")
+            for r in stub_ranges:
+                start, end = r
+                if start < 1:
+                    raise ValueError(f"Stub '{stid}': FP range start ({start}) must be >= 1.")
+                if start > end:
+                    raise ValueError(f"Stub '{stid}': FP range [{start}, {end}] is inverted.")
+                if end > trunk_fps:
+                    raise ValueError(f"Stub '{stid}' references FP {end}, but trunk only has {trunk_fps} FPs.")
 
     # --- XML SCAFFOLD ---
     mxfile = ET.Element('mxfile', version="21.6.8")
@@ -95,6 +114,16 @@ def generate_from_config(config):
 
     # --- PRIMITIVE HELPERS ---
     def add_node(node_id, x, y, label, height=TRUNK_NODE_HEIGHT, node_type="trunk", inactive=False):
+        if node_type == "stub":
+            style = (
+                "rounded=1;whiteSpace=wrap;html=1;"
+                "fillColor=#fff2cc;strokeColor=#d79b00;strokeWidth=2;"
+                "verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;"
+            )
+            cell = ET.SubElement(root, 'mxCell', id=node_id, value=label, style=style, vertex="1", parent="1")
+            ET.SubElement(cell, 'mxGeometry', x=str(x), y=str(y),
+                          width=str(NODE_WIDTH), height=str(height), **{'as': 'geometry'})
+            return
         if node_type in ("drop", "sub"):
             if inactive:
                 style = (
@@ -186,8 +215,8 @@ def generate_from_config(config):
         temp_shift = 0
         is_1x2     = bu.get("switch_type") == "1x2"
 
-        for drop in bu["drops"]:
-            for r in get_ranges(drop):
+        for item in list(bu["drops"]) + bu.get("stubs", []):
+            for r in get_ranges(item):
                 is_new_bundle = False
                 for i in range(r[0], r[1] + 1):
                     if i not in temp_fp_x:
@@ -243,6 +272,17 @@ def generate_from_config(config):
 
             current_drop_y += drop_height + DROP_DEPTH
 
+        # Place stub nodes (amber, same height as a plain drop)
+        for stub in bu.get("stubs", []):
+            stub_height = 100
+            nodes[stub["target_id"]] = {
+                "x": aligned_drop_x, "y": current_drop_y,
+                "label": stub.get("label", "Stub"),
+                "height": stub_height,
+                "node_type": "stub",
+            }
+            current_drop_y += stub_height + DROP_DEPTH
+
         current_col_x += NODE_WIDTH + LANE_WIDTH
 
     nodes["EAST"] = {
@@ -283,8 +323,8 @@ def generate_from_config(config):
         cur_shift   = 0
         is_1x2      = bu.get("switch_type") == "1x2"
 
-        for drop in bu["drops"]:
-            for r in get_ranges(drop):
+        for item in list(bu["drops"]) + bu.get("stubs", []):
+            for r in get_ranges(item):
                 is_new_bundle = False
                 for i in range(r[0], r[1] + 1):
                     if i not in fp_x_coords:
@@ -368,6 +408,72 @@ def generate_from_config(config):
 
             for line_args in fp_sub_lines:
                 add_line(*line_args)
+
+        # ── STUB RENDERING ────────────────────────────────────────────────────
+        # Each stub renders independently with its own switch_position.
+        # 1x1: vertical lines drop into the stub and terminate (no exit).
+        # 1x2: same, plus a horizontal joining bar connects paired lines
+        #      at the terminal point — showing the fibres are joined inside.
+        for stub in bu.get("stubs", []):
+            stub_switch_pos = stub.get("switch_position", "default")
+            stub_node       = nodes[stub["target_id"]]
+            stub_bot_y      = stub_node["y"] + stub_node["height"] - 18
+
+            # Collect all FPs in this stub across all its bundles
+            stub_fps = []
+            for r in get_ranges(stub):
+                stub_fps.extend(range(r[0], r[1] + 1))
+
+            if stub_switch_pos == "pos1":
+                # Trunk passes through — markers only, no vertical lines
+                for i in stub_fps:
+                    trunk_y = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
+                    for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
+                        place_intersection_marker(
+                            f"switch_stub_{i}_{stub['target_id']}_{x_idx}",
+                            x_coord, trunk_y, fp_colors[i], "pos1"
+                        )
+            else:
+                # Draw vertical lines from trunk down into stub
+                for i in stub_fps:
+                    trunk_y = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
+                    for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
+                        add_line(
+                            f"fp_{i}_{stub['target_id']}_stub_{x_idx}",
+                            x_coord, trunk_y, x_coord, stub_bot_y, fp_colors[i]
+                        )
+                        place_intersection_marker(
+                            f"switch_stub_{i}_{stub['target_id']}_{x_idx}",
+                            x_coord, trunk_y, fp_colors[i], stub_switch_pos
+                        )
+
+                # For 1x2: draw horizontal joining bars at stub_bot_y,
+                # one bar per contiguous pair of x-coords (x1, x2) per FP.
+                if is_1x2:
+                    drawn_bars = set()
+                    for i in stub_fps:
+                        coords = fp_x_coords.get(i, [])
+                        if len(coords) == 2:
+                            x1, x2 = coords[0], coords[1]
+                            bar_key = (round(x1, 1), round(x2, 1))
+                            if bar_key not in drawn_bars:
+                                add_line(
+                                    f"stub_bar_{stub['target_id']}_{i}",
+                                    x1, stub_bot_y, x2, stub_bot_y, fp_colors[i]
+                                )
+                                drawn_bars.add(bar_key)
+                else:
+                    # 1x1: draw a short horizontal termination cap at stub_bot_y
+                    CAP_W = 6
+                    for i in stub_fps:
+                        for x_idx, x_coord in enumerate(fp_x_coords.get(i, [])):
+                            cap_key = f"stub_cap_{stub['target_id']}_{i}_{x_idx}"
+                            add_line(
+                                cap_key,
+                                x_coord - CAP_W // 2, stub_bot_y,
+                                x_coord + CAP_W // 2, stub_bot_y,
+                                fp_colors[i]
+                            )
 
     # --- LEGENDS ---
     def add_color_legend(lx, ly):
