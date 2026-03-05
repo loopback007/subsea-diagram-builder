@@ -23,7 +23,7 @@ To build subsea cable systems diagrams for Network Engineers.
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
-## 📖 Overview
+## ðŸ“– Overview
 
 The **Subsea Diagram Builder** is a specialized tool designed to help Network Engineers visualize, construct, and manage diagrams of subsea cable systems. By providing a streamlined interface and backend processing, this project simplifies the complex task of mapping out international underwater network infrastructure.The repository includes Docker-first deployment options and production compose support via `docker-compose.prod.yml`.
 
@@ -59,7 +59,7 @@ Host port 8081
 
 ---
 
-## 🛠️ Tech Stack
+## ðŸ› ï¸ Tech Stack
 
 This project is built using the following technologies:
 
@@ -70,18 +70,18 @@ This project is built using the following technologies:
 
 ## Repository Structure
 
-- `app.py` � Flask application entry point
-- `subsea_engine.py` � diagram generation/business logic
-- `topology_payload.json` � sample topology payload/input
-- `static/` � static files for UI
-- `requirements.txt` � Python dependencies
-- `Dockerfile` � container build recipe
-- `docker-compose.yml` � general/local compose config
-- `docker-compose.prod.yml` � production-style compose file
-- `nginx.conf` � NGINX config
-- `start.sh` � startup helper script
+- `app.py` — Flask application entry point
+- `subsea_engine.py` — diagram generation/business logic
+- `topology_payload.json` — sample topology payload/input
+- `static/` — static files for UI
+- `requirements.txt` — Python dependencies
+- `Dockerfile` — container build recipe
+- `docker-compose.yml` — general/local compose config
+- `docker-compose.prod.yml` — production-style compose file
+- `nginx.conf` — NGINX config
+- `start.sh` — startup helper script
 
-## 🚀 Getting Started
+## ðŸš€ Getting Started
 
 ### Prerequisites
 
@@ -131,10 +131,10 @@ To run this project locally, ensure you have the following installed:
    python app.py
    ```
 
-## 🤝 Contributing
+## ðŸ¤ Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/loopback007/subsea-diagram-builder/issues) if you want to contribute.
 
-## 📝 License
+## ðŸ“ License
 
 This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details. (Update this section with your actual license if different).
