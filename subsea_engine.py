@@ -745,10 +745,10 @@ def generate_from_config(config):
         ET.SubElement(sw_box, 'mxGeometry', x=fx(170), y=fy(290),
                       width="260", height="250", **{'as': 'geometry'})
 
-        # ── Row 1: Default ──────────────────────────────────────────────────────
-        v_edge    ("sw_r1_h",   182, 338, 232, 338,  GREY)
-        v_ellipse ("sw_r1_dot", 202, 333, 10,  10,   DOT_B)
-        v_text    ("sw_r1_lbl", "Default — dot",          240, 320, 178, 36)
+        # ── Row 1: Default removed ──────────────────────────────────────────────────────
+        #v_edge    ("sw_r1_h",   182, 338, 232, 338,  GREY)
+        #v_ellipse ("sw_r1_dot", 202, 333, 10,  10,   DOT_B)
+        #v_text    ("sw_r1_lbl", "Default — dot",          240, 320, 178, 36)
 
         # ── Row 2: Pos 1 — Trunk Through ────────────────────────────────────────
         v_edge    ("sw_r2_h",   182, 374, 232, 374,  GREY)
