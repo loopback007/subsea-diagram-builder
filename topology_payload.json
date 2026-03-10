@@ -9,25 +9,14 @@
     {
       "id": "BU1",
       "label": "BU 1",
+      "routing_mode": "hairpin",
+      "switch_type": "1x1",
       "drops": [
         {
           "target_id": "CLS2",
-          "label": "CLS 2\n(24 FP Branch)",
-          "fp_range": [13, 18],
+          "label": "CLS 2\n(Hairpin Branch)",
+          "fp_ranges": [[13, 24]],
           "sub_branches": []
-        },
-        {
-          "target_id": "BU1B",
-          "label": "BU 1B\n(Sub-Branch)",
-          "fp_range": [19, 24],
-          "sub_branches": [
-            {
-              "target_id": "CLS4",
-              "label": "CLS 4\n(24 FP Branch)",
-              "fp_range": [19, 24],
-              "direction": "east" 
-            }
-          ]
         }
       ]
     }

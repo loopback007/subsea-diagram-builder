@@ -194,6 +194,17 @@ def generate_from_config(config):
         ET.SubElement(cell, 'mxGeometry', x=str(x), y=str(y - 7),
                       width="20", height="15", **{'as': 'geometry'})
 
+    def split_hairpin_coords(coords):
+        """Split a hairpin FP coord list into (down_coords, up_coords).
+
+        For 1x1 hairpin coords = [x_down, x_up]   → down=[x_down], up=[x_up]
+        For 1x2 hairpin coords = [d1, d2, u1, u2]  → down=[d1, d2], up=[u1, u2]
+        The first half of the list are the 'down' (West-side) lines; the second
+        half are the 'up' (East-side) lines that complete the U-turn.
+        """
+        mid = len(coords) // 2
+        return coords[:mid], coords[mid:]
+
     # --- NODE LAYOUT ---
     nodes["WEST"] = {
         "x": 50, "y": 50, "label": config["trunk"]["west_node"],
@@ -202,8 +213,10 @@ def generate_from_config(config):
     current_col_x = 50 + NODE_WIDTH + LANE_WIDTH
 
     for bu in config["branches"]:
-        switch_pos  = bu.get("switch_position", "default")
-        bu_inactive = (switch_pos == "pos1")
+        switch_pos   = bu.get("switch_position", "default")
+        routing_mode = bu.get("routing_mode", "express")
+        # Hairpin drop nodes are always rendered active (not ghosted).
+        bu_inactive  = (switch_pos == "pos1") and (routing_mode != "hairpin")
 
         nodes[bu["id"]] = {
             "x": current_col_x, "y": 50, "label": bu["label"],
@@ -211,21 +224,34 @@ def generate_from_config(config):
         }
         current_drop_y = 50 + TRUNK_NODE_HEIGHT + DROP_DEPTH
 
-        temp_fp_x  = {}
-        temp_shift = 0
-        is_1x2     = bu.get("switch_type") == "1x2"
+        temp_fp_x   = {}
+        temp_shift  = 0
+        is_1x2      = bu.get("switch_type") == "1x2"
+        is_hairpin  = (routing_mode == "hairpin")
 
         for item in list(bu["drops"]) + bu.get("stubs", []):
             for r in get_ranges(item):
                 is_new_bundle = False
                 for i in range(r[0], r[1] + 1):
                     if i not in temp_fp_x:
-                        if is_1x2:
-                            temp_fp_x[i] = [current_col_x + temp_shift + 10,
-                                            current_col_x + temp_shift + 10 + LINE_GAP]
+                        base_x = current_col_x + temp_shift + 10
+                        if is_hairpin:
+                            if is_1x2:
+                                # 4 coords: [x_d1, x_d2, x_u1, x_u2]
+                                temp_fp_x[i] = [base_x,
+                                                base_x + LINE_GAP,
+                                                base_x + LINE_GAP * 2,
+                                                base_x + LINE_GAP * 3]
+                                temp_shift += LINE_GAP * 4
+                            else:
+                                # 2 coords: [x_down, x_up]
+                                temp_fp_x[i] = [base_x, base_x + LINE_GAP]
+                                temp_shift += LINE_GAP * 2
+                        elif is_1x2:
+                            temp_fp_x[i] = [base_x, base_x + LINE_GAP]
                             temp_shift += LINE_GAP * 2
                         else:
-                            temp_fp_x[i] = [current_col_x + temp_shift + 10]
+                            temp_fp_x[i] = [base_x]
                             temp_shift += LINE_GAP
                         is_new_bundle = True
                 if is_new_bundle:
@@ -296,24 +322,59 @@ def generate_from_config(config):
                  data.get("inactive", False))
 
     # --- TRUNK LINES ---
-    trunk_end_x = {i: nodes["EAST"]["x"] for i in range(1, trunk_fps + 1)}
+    # trunk_segs[i] = list of (start_x, end_x) horizontal segments for FP i.
+    # Most FPs have a single segment (WEST→EAST). Fixed routing truncates it.
+    # Hairpin routing splits it into two: WEST→x_down and x_up→EAST (or next).
+    WEST_right_x = nodes["WEST"]["x"] + NODE_WIDTH
+    EAST_x       = nodes["EAST"]["x"]
+    trunk_segs   = {i: [(WEST_right_x, EAST_x)] for i in range(1, trunk_fps + 1)}
+
     for bu in config["branches"]:
-        if bu.get("routing_mode") == "fixed":
+        _rm = bu.get("routing_mode", "express")
+        if _rm == "fixed":
             bu_right_x = nodes[bu["id"]]["x"] + NODE_WIDTH
             for drop in bu["drops"]:
                 for r in get_ranges(drop):
                     for i in range(r[0], r[1] + 1):
-                        if trunk_end_x[i] == nodes["EAST"]["x"]:
-                            trunk_end_x[i] = bu_right_x
+                        if trunk_segs[i][-1][1] >= EAST_x:
+                            trunk_segs[i][-1] = (trunk_segs[i][-1][0], bu_right_x)
+        elif _rm == "hairpin":
+            # Re-compute fp_x_coords for this BU to find x_down / x_up per FP.
+            _is_1x2 = bu.get("switch_type") == "1x2"
+            _fp_x   = {}
+            _shift  = 0
+            for item in list(bu["drops"]) + bu.get("stubs", []):
+                for r in get_ranges(item):
+                    _new_bundle = False
+                    for i in range(r[0], r[1] + 1):
+                        if i not in _fp_x:
+                            bx = nodes[bu["id"]]["x"] + _shift + 10
+                            if _is_1x2:
+                                _fp_x[i] = [bx, bx+LINE_GAP, bx+LINE_GAP*2, bx+LINE_GAP*3]
+                                _shift += LINE_GAP * 4
+                            else:
+                                _fp_x[i] = [bx, bx + LINE_GAP]
+                                _shift += LINE_GAP * 2
+                            _new_bundle = True
+                    if _new_bundle:
+                        _shift += BUNDLE_GAP
+            for i, coords in _fp_x.items():
+                down_c, up_c = split_hairpin_coords(coords)
+                x_down = down_c[0]       # West trunk ends at the first down line
+                x_up   = up_c[0]         # East trunk starts at the first up line
+                segs   = trunk_segs[i]
+                last_start, last_end = segs[-1]
+                segs[-1] = (last_start, x_down)      # Truncate existing segment
+                segs.append((x_up, last_end))         # New segment from x_up onward
 
     for i in range(1, trunk_fps + 1):
         y_off = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
-        end_x = trunk_end_x[i]
-        add_line(f"fp_{i}_trunk", nodes["WEST"]["x"] + NODE_WIDTH, y_off,
-                 end_x, y_off, fp_colors[i])
-        add_label(i, nodes["WEST"]["x"] + NODE_WIDTH - 20, y_off)
-        if end_x >= nodes["EAST"]["x"]:
-            add_label(i, nodes["EAST"]["x"] + 10, y_off)
+        for seg_idx, (sx, ex) in enumerate(trunk_segs[i]):
+            lid = f"fp_{i}_trunk" if seg_idx == 0 else f"fp_{i}_trunk_{seg_idx}"
+            add_line(lid, sx, y_off, ex, y_off, fp_colors[i])
+        add_label(i, WEST_right_x - 20, y_off)
+        if trunk_segs[i][-1][1] >= EAST_x:
+            add_label(i, EAST_x + 10, y_off)
 
     # --- CABLE SEGMENT LABELS ---
     # Optional per-segment name labels drawn above the trunk span.
@@ -351,29 +412,73 @@ def generate_from_config(config):
 
     # --- RENDER DROP ROUTING ---
     for bu in config["branches"]:
-        switch_pos = bu.get("switch_position", "default")
+        switch_pos   = bu.get("switch_position", "default")
+        routing_mode = bu.get("routing_mode", "express")
 
         fp_x_coords = {}
         cur_shift   = 0
         is_1x2      = bu.get("switch_type") == "1x2"
+        is_hairpin  = (routing_mode == "hairpin")
 
         for item in list(bu["drops"]) + bu.get("stubs", []):
             for r in get_ranges(item):
                 is_new_bundle = False
                 for i in range(r[0], r[1] + 1):
                     if i not in fp_x_coords:
-                        if is_1x2:
-                            x1 = nodes[bu["id"]]["x"] + cur_shift + 10
-                            fp_x_coords[i] = [x1, x1 + LINE_GAP]
+                        base_x = nodes[bu["id"]]["x"] + cur_shift + 10
+                        if is_hairpin:
+                            if is_1x2:
+                                fp_x_coords[i] = [base_x,
+                                                  base_x + LINE_GAP,
+                                                  base_x + LINE_GAP * 2,
+                                                  base_x + LINE_GAP * 3]
+                                cur_shift += LINE_GAP * 4
+                            else:
+                                fp_x_coords[i] = [base_x, base_x + LINE_GAP]
+                                cur_shift += LINE_GAP * 2
+                        elif is_1x2:
+                            fp_x_coords[i] = [base_x, base_x + LINE_GAP]
                             cur_shift += LINE_GAP * 2
                         else:
-                            fp_x_coords[i] = [nodes[bu["id"]]["x"] + cur_shift + 10]
+                            fp_x_coords[i] = [base_x]
                             cur_shift += LINE_GAP
                         is_new_bundle = True
                 if is_new_bundle:
                     cur_shift += BUNDLE_GAP
 
-        if switch_pos == "pos1":
+        if is_hairpin:
+            # Collect all FPs that belong to this hairpin BU.
+            all_hp_fps = set()
+            for drop in bu["drops"]:
+                for r in get_ranges(drop):
+                    all_hp_fps.update(range(r[0], r[1] + 1))
+
+            # Shared terminal Y = deepest (maximum Y) drop node among all drops.
+            terminal_y = 0
+            for drop in bu["drops"]:
+                terminal_y = max(terminal_y, nodes[drop["target_id"]]["y"])
+
+            # Draw the hairpin vertical lines for each FP — no markers.
+            for i in sorted(all_hp_fps):
+                coords = fp_x_coords.get(i, [])
+                if not coords:
+                    continue
+                trunk_y              = nodes["WEST"]["y"] + (i * FP_SPACING) + 30
+                down_coords, up_coords = split_hairpin_coords(coords)
+
+                for idx, x_d in enumerate(down_coords):
+                    add_line(f"fp_{i}_{bu['id']}_hp_down_{idx}",
+                             x_d, trunk_y, x_d, terminal_y, fp_colors[i])
+                for idx, x_u in enumerate(up_coords):
+                    add_line(f"fp_{i}_{bu['id']}_hp_up_{idx}",
+                             x_u, terminal_y, x_u, trunk_y, fp_colors[i])
+                # Horizontal bar at terminal_y connecting last down → first up
+                if down_coords and up_coords:
+                    add_line(f"fp_{i}_{bu['id']}_hp_bar",
+                             down_coords[-1], terminal_y,
+                             up_coords[0],   terminal_y, fp_colors[i])
+
+        elif switch_pos == "pos1":
             # Trunk passes straight through — numbered markers only, no branch lines.
             bu_fps = set()
             for drop in bu["drops"]:
@@ -640,10 +745,10 @@ def generate_from_config(config):
         ET.SubElement(sw_box, 'mxGeometry', x=fx(170), y=fy(290),
                       width="260", height="250", **{'as': 'geometry'})
 
-        # ── Row 1: Default ──────────────────────────────────────────────────────
-        v_edge    ("sw_r1_h",   182, 338, 232, 338,  GREY)
-        v_ellipse ("sw_r1_dot", 202, 333, 10,  10,   DOT_B)
-        v_text    ("sw_r1_lbl", "Default — dot",          240, 320, 178, 36)
+        # ── Row 1: Default removed ──────────────────────────────────────────────────────
+        #v_edge    ("sw_r1_h",   182, 338, 232, 338,  GREY)
+        #v_ellipse ("sw_r1_dot", 202, 333, 10,  10,   DOT_B)
+        #v_text    ("sw_r1_lbl", "Default — dot",          240, 320, 178, 36)
 
         # ── Row 2: Pos 1 — Trunk Through ────────────────────────────────────────
         v_edge    ("sw_r2_h",   182, 374, 232, 374,  GREY)
