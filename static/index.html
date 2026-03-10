@@ -501,9 +501,11 @@
         const val = selectEl.value;
         card.querySelector('.fixed-routing-badge').style.display = val === 'fixed'   ? 'inline-block' : 'none';
         card.querySelector('.hairpin-badge').style.display        = val === 'hairpin' ? 'inline-block' : 'none';
-        // Hairpin mode does not use switch-position markers — hide the selector.
+        // Hairpin mode does not use switch-position markers — hide the selector AND badge.
         const swPos = card.querySelector('.switchPosition');
         if (swPos) swPos.style.display = val === 'hairpin' ? 'none' : '';
+        const swBadge = card.querySelector('.sw-pos-badge');
+        if (swBadge && val === 'hairpin') swBadge.style.display = 'none';
         refreshJsonPreview();
     }
     function deleteBU(buId) { document.getElementById(`card_${buId}`)?.remove(); refreshJsonPreview(); }

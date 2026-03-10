@@ -343,7 +343,8 @@ def generate_from_config(config):
             _is_1x2 = bu.get("switch_type") == "1x2"
             _fp_x   = {}
             _shift  = 0
-            for item in list(bu["drops"]) + bu.get("stubs", []):
+            # Stubs have their own independent rendering and should NOT cut the trunk.
+            for item in bu["drops"]:
                 for r in get_ranges(item):
                     _new_bundle = False
                     for i in range(r[0], r[1] + 1):
@@ -360,8 +361,10 @@ def generate_from_config(config):
                         _shift += BUNDLE_GAP
             for i, coords in _fp_x.items():
                 down_c, up_c = split_hairpin_coords(coords)
-                x_down = down_c[0]       # West trunk ends at the first down line
-                x_up   = up_c[0]         # East trunk starts at the first up line
+                # Trunk must reach the LAST down coord so all down-lines
+                # connect, and resume from the LAST up coord outward.
+                x_down = down_c[-1]      # West trunk ends at the last down line
+                x_up   = up_c[-1]        # East trunk starts at the last up line
                 segs   = trunk_segs[i]
                 last_start, last_end = segs[-1]
                 segs[-1] = (last_start, x_down)      # Truncate existing segment
@@ -420,7 +423,11 @@ def generate_from_config(config):
         is_1x2      = bu.get("switch_type") == "1x2"
         is_hairpin  = (routing_mode == "hairpin")
 
-        for item in list(bu["drops"]) + bu.get("stubs", []):
+        # Drops use hairpin layout (2 or 4 coords); stubs always use
+        # the non-hairpin layout (1 or 2 coords) since they don't U-turn.
+
+        # Phase 1: drops (respect hairpin mode)
+        for item in bu["drops"]:
             for r in get_ranges(item):
                 is_new_bundle = False
                 for i in range(r[0], r[1] + 1):
@@ -437,6 +444,23 @@ def generate_from_config(config):
                                 fp_x_coords[i] = [base_x, base_x + LINE_GAP]
                                 cur_shift += LINE_GAP * 2
                         elif is_1x2:
+                            fp_x_coords[i] = [base_x, base_x + LINE_GAP]
+                            cur_shift += LINE_GAP * 2
+                        else:
+                            fp_x_coords[i] = [base_x]
+                            cur_shift += LINE_GAP
+                        is_new_bundle = True
+                if is_new_bundle:
+                    cur_shift += BUNDLE_GAP
+
+        # Phase 2: stubs (always non-hairpin layout — they drop, not U-turn)
+        for item in bu.get("stubs", []):
+            for r in get_ranges(item):
+                is_new_bundle = False
+                for i in range(r[0], r[1] + 1):
+                    if i not in fp_x_coords:
+                        base_x = nodes[bu["id"]]["x"] + cur_shift + 10
+                        if is_1x2:
                             fp_x_coords[i] = [base_x, base_x + LINE_GAP]
                             cur_shift += LINE_GAP * 2
                         else:
