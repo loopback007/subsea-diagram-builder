@@ -459,12 +459,14 @@
                     <div style="display:flex;align-items:center;gap:8px;">
                         <h4 style="margin:0;color:#323130;">Branching Unit: ${buId}</h4>
                         <span class="fixed-routing-badge" style="display:none;font-size:0.72em;font-weight:600;background:#fff4ce;border:1px solid #f0c000;color:#7d5c00;padding:2px 8px;border-radius:10px;letter-spacing:0.03em;">FIXED ROUTING</span>
+                        <span class="hairpin-badge" style="display:none;font-size:0.72em;font-weight:600;background:#e6f7e6;border:1px solid #52c41a;color:#1a5c1a;padding:2px 8px;border-radius:10px;letter-spacing:0.03em;">HAIRPIN</span>
                         <span class="sw-pos-badge" style="display:none;"></span>
                     </div>
                     <div class="card-controls">
                         <select class="routingMode" title="Fibre Routing Mode" style="background-color:#f0f2f5;border:1px solid #ccc;border-radius:4px;padding:4px;margin:0;" onchange="onRoutingModeChange(this)">
                             <option value="express">Express (pass-through)</option>
                             <option value="fixed">Fixed Fibre Routing</option>
+                            <option value="hairpin">Hairpin (U-Turn)</option>
                         </select>
                         <select class="switchType" style="background-color:#f0f2f5;border:1px solid #ccc;border-radius:4px;padding:4px;margin:0;">
                             <option value="1x1">1x1 Switch (Direct Drop)</option>
@@ -496,7 +498,12 @@
     }
     function onRoutingModeChange(selectEl) {
         const card = selectEl.closest('.bu-card');
-        card.querySelector('.fixed-routing-badge').style.display = selectEl.value === 'fixed' ? 'inline-block' : 'none';
+        const val = selectEl.value;
+        card.querySelector('.fixed-routing-badge').style.display = val === 'fixed'   ? 'inline-block' : 'none';
+        card.querySelector('.hairpin-badge').style.display        = val === 'hairpin' ? 'inline-block' : 'none';
+        // Hairpin mode does not use switch-position markers — hide the selector.
+        const swPos = card.querySelector('.switchPosition');
+        if (swPos) swPos.style.display = val === 'hairpin' ? 'none' : '';
         refreshJsonPreview();
     }
     function deleteBU(buId) { document.getElementById(`card_${buId}`)?.remove(); refreshJsonPreview(); }
